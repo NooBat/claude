@@ -1,0 +1,267 @@
+---
+name: plan
+description: "Codebase-aware implementation planning. Scans the codebase before writing plans to find reusable code, understand existing patterns, and avoid reinventing. Accepts a PRP as input (preferred) or gathers requirements ad-hoc. Produces a detailed implementation plan with full codebase context."
+---
+
+# Plan: Codebase-Aware Implementation Planning
+
+Write implementation plans that are grounded in what actually exists. Before writing a single task, scan the codebase to find reusable code, understand established patterns, and avoid reinventing what's already built.
+
+**Announce at start:** "I'm using the plan skill to create a codebase-aware implementation plan."
+
+**Save plans to:** `docs/plans/YYYY-MM-DD-<feature-name>.md` (user preferences override this default)
+
+## Checklist
+
+You MUST create a task for each of these items and complete them in order:
+
+1. **Ingest PRP** (or gather requirements ad-hoc)
+2. **Codebase scan** — broad architecture scan + targeted deep dives
+3. **Reconcile** — cross-check PRP assumptions against codebase reality
+4. **Write plan** — implementation plan with full codebase context
+5. **Review & handoff** — plan review loop, user approval, execution handoff
+
+## Process Flow
+
+```dot
+digraph plan {
+    rankdir=TB;
+
+    "PRP exists?" [shape=diamond];
+    "Read PRP, extract\nscope & context" [shape=box];
+    "Ad-hoc: ask 2-3\nrequirements questions" [shape=box];
+    "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)" [shape=box];
+    "Targeted deep dives\n(files to modify, functions to reuse,\ntest patterns, integration points)" [shape=box];
+    "Reconcile PRP vs\ncodebase reality" [shape=box];
+    "Significant\nmismatches?" [shape=diamond];
+    "Report to user,\nresolve conflicts" [shape=box];
+    "Write implementation\nplan" [shape=box];
+    "Plan review loop" [shape=box];
+    "Review passed?" [shape=diamond];
+    "User reviews plan" [shape=box];
+    "User approves?" [shape=diamond];
+    "Execution handoff" [shape=doublecircle];
+
+    "PRP exists?" -> "Read PRP, extract\nscope & context" [label="yes"];
+    "PRP exists?" -> "Ad-hoc: ask 2-3\nrequirements questions" [label="no"];
+    "Read PRP, extract\nscope & context" -> "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)";
+    "Ad-hoc: ask 2-3\nrequirements questions" -> "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)";
+    "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)" -> "Targeted deep dives\n(files to modify, functions to reuse,\ntest patterns, integration points)";
+    "Targeted deep dives\n(files to modify, functions to reuse,\ntest patterns, integration points)" -> "Reconcile PRP vs\ncodebase reality";
+    "Reconcile PRP vs\ncodebase reality" -> "Significant\nmismatches?";
+    "Significant\nmismatches?" -> "Report to user,\nresolve conflicts" [label="yes"];
+    "Significant\nmismatches?" -> "Write implementation\nplan" [label="no"];
+    "Report to user,\nresolve conflicts" -> "Write implementation\nplan";
+    "Write implementation\nplan" -> "Plan review loop";
+    "Plan review loop" -> "Review passed?";
+    "Review passed?" -> "Plan review loop" [label="issues found,\nfix and re-dispatch"];
+    "Review passed?" -> "User reviews plan" [label="approved"];
+    "User reviews plan" -> "User approves?";
+    "User approves?" -> "Write implementation\nplan" [label="changes\nrequested"];
+    "User approves?" -> "Execution handoff" [label="approved"];
+}
+```
+
+---
+
+## Phase 1: INGEST PRP
+
+### If PRP exists:
+- Read the PRP file
+- Extract the **Codebase Context** section (research findings from pair-brainstorm)
+- Extract scope, constraints, boundaries, and success criteria
+- Note the **Decisions Log** — these decisions are settled; do not re-open them
+- Note **Open Questions** — these need to be resolved during planning
+
+### If no PRP (ad-hoc mode):
+- Ask 2-3 focused requirements questions:
+  - What are you building? (scope)
+  - What constraints exist? (technical limits, patterns to follow)
+  - What does "done" look like? (success criteria)
+- Then proceed to Phase 2
+
+### Scope Check
+If the PRP (or ad-hoc scope) covers multiple independent subsystems, suggest breaking into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+
+---
+
+## Phase 2: CODEBASE SCAN
+
+Two-pass scan. Dispatch parallel subagents for different areas.
+
+### Pass 1: Broad Architecture Scan
+Understand the project landscape:
+- **Project structure:** directory layout, module organization, key config files
+- **Shared utilities:** common modules, helper functions, base classes
+- **Test infrastructure:** test runner, fixtures, mocks, test patterns
+- **Build system:** build tools, dependency management, CI/CD
+- **Code conventions:** naming, file organization, error handling patterns
+
+### Pass 2: Targeted Deep Dives
+Zoom into areas the PRP touches:
+- **Files to modify or extend:** read them, understand their structure
+- **Functions to reuse:** identify specific functions/classes that can be leveraged
+- **Existing test patterns:** how are tests written for similar functionality?
+- **Integration points:** where does this feature connect to existing code?
+
+**Dispatch subagents freely.** Examples:
+- One agent scans shared utilities and common patterns
+- Another explores the specific modules the PRP targets
+- A third reviews test infrastructure and conventions
+
+---
+
+## Phase 3: RECONCILE
+
+Cross-check the PRP's assumptions against what you actually found. This phase catches the "plans in a vacuum" problem.
+
+### Validate Assumptions
+- Does the PRP's Codebase Context match reality?
+- Are the "established patterns" it references still current?
+- Are the "reusable components" it lists still available and appropriate?
+
+### Identify Reuse Opportunities
+- Functions/modules the PRP missed that could reduce implementation work
+- Existing test utilities that can be leveraged
+- Patterns in adjacent code that should be followed
+
+### Flag Conflicts
+- Proposed architecture conflicting with existing patterns
+- Data flow assumptions that don't match actual interfaces
+- Dependencies that have changed since the PRP was written
+
+### Report
+- **If no significant mismatches:** proceed silently to Phase 4
+- **If significant mismatches found:** report to the user with specifics:
+  > "The PRP says X, but the codebase actually does Y. This affects the design because Z. How should we proceed?"
+
+  Wait for the user to resolve the conflict before proceeding.
+
+---
+
+## Phase 4: WRITE PLAN
+
+### Plan Document Header
+Every plan MUST start with:
+
+```markdown
+# [Feature Name] Implementation Plan
+
+> **For agentic workers:** Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** [One sentence describing what this builds]
+
+**Architecture:** [2-3 sentences about approach]
+
+**Tech Stack:** [Key technologies/libraries]
+
+**PRP Reference:** [path to PRP if one exists]
+
+---
+```
+
+### File Structure
+Before defining tasks, map out which files will be created or modified:
+- Design units with clear boundaries and well-defined interfaces
+- Each file should have one clear responsibility
+- Follow established codebase patterns
+- Reference specific existing files discovered in the codebase scan
+
+### Task Structure
+
+````markdown
+### Task N: [Component Name]
+
+**Files:**
+- Create: `exact/path/to/file.py`
+- Modify: `exact/path/to/existing.py` (reuses: `existing_function()` from scan)
+- Test: `tests/exact/path/to/test.py`
+
+**Codebase context:** [Specific findings from scan that inform this task — e.g., "Follow the pattern in `src/auth/middleware.py` which uses dependency injection for testability"]
+
+- [ ] **Step 1: Write the failing test**
+
+```python
+def test_specific_behavior():
+    result = function(input)
+    assert result == expected
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pytest tests/path/test.py::test_name -v`
+Expected: FAIL with "function not defined"
+
+- [ ] **Step 3: Write minimal implementation**
+
+```python
+def function(input):
+    return expected
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pytest tests/path/test.py::test_name -v`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add tests/path/test.py src/path/file.py
+git commit -m "feat: add specific feature"
+```
+````
+
+### Task Granularity
+- Each step is one action (2-5 minutes)
+- TDD cycle when appropriate: failing test -> verify failure -> implement -> verify pass -> commit
+- Each task references specific existing files/functions discovered in the scan
+- Complete code in plan (not "add validation" — show the validation code)
+- Exact commands with expected output
+
+### Carrying Forward Decisions
+- The plan inherits the PRP's Decisions Log
+- Do NOT re-open settled decisions
+- If the codebase scan reveals new information that challenges a decision, flag it in Phase 3 (RECONCILE), don't silently override
+
+---
+
+## Phase 5: REVIEW & HANDOFF
+
+### Plan Review Loop
+1. Dispatch plan-reviewer subagent (see `skills/plan/plan-reviewer-prompt.md`) with precisely crafted context
+2. If Issues Found: fix, re-dispatch, repeat until Approved
+3. Max 3 iterations, then surface to human for guidance
+
+### User Review
+Present the plan:
+
+> "Plan written and committed to `<path>`. Please review and let me know if you want changes before we start implementation."
+
+Wait for user response. If changes requested, make them and re-run review loop.
+
+### Execution Handoff
+After user approves:
+
+> "Plan approved. Two execution options:
+>
+> **1. Subagent-Driven (recommended)** — I dispatch a fresh subagent per task, review between tasks, fast iteration
+>
+> **2. Inline Execution** — Execute tasks in this session with checkpoints for review
+>
+> Which approach?"
+
+**If Subagent-Driven:** Use superpowers:subagent-driven-development
+**If Inline Execution:** Use superpowers:executing-plans
+
+---
+
+## Key Principles
+
+- **Always scan the codebase before planning** — even if the PRP has a Codebase Context section, verify it
+- **Reference specific files and functions** in every task — no generic "implement the component" steps
+- **Carry forward decision rationale** — don't re-open settled decisions from the PRP
+- **Dispatch subagents freely** — for parallel codebase exploration
+- **Reconcile before writing** — catch PRP/codebase mismatches early
+- **DRY, YAGNI, TDD** — same engineering principles, now grounded in real code
+- **Exact file paths, complete code, exact commands** — the engineer following this plan should never have to guess

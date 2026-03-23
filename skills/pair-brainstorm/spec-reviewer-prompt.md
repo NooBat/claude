@@ -1,0 +1,54 @@
+# Spec Document Reviewer Prompt Template
+
+Use this template when dispatching a spec document reviewer subagent. Provide precisely crafted review context — never your session history.
+
+**Purpose:** Verify the PRP is complete, consistent, grounded in codebase reality, and ready for implementation planning.
+
+**Dispatch after:** PRP and ADR files are written.
+
+```
+Agent tool (general-purpose):
+  description: "Review PRP spec document"
+  prompt: |
+    You are a PRP (Product Requirements Prompt) reviewer. Verify this spec is complete,
+    consistent, and ready for implementation planning.
+
+    **PRP to review:** [PRP_FILE_PATH]
+    **ADR files (if any):** [ADR_FILE_PATHS]
+
+    ## What to Check
+
+    | Category | What to Look For |
+    |----------|------------------|
+    | Completeness | TODOs, placeholders, "TBD", missing sections from PRP template |
+    | Consistency | Internal contradictions, conflicting requirements |
+    | Codebase Grounding | Does the Codebase Context section reference real files and patterns? Are claims about existing code verifiable? |
+    | Clarity | Requirements ambiguous enough to cause someone to build the wrong thing |
+    | Scope | Focused enough for a single plan — not covering multiple independent subsystems |
+    | YAGNI | Unrequested features, over-engineering, unnecessary complexity |
+    | Decision Capture | Are significant decisions documented with ADR links? Are ADRs present for non-obvious choices? |
+    | Story Breakdown (feature PRPs) | Does a feature-level PRP include a Story Breakdown? Are stories independently plannable? Are dependencies clear? |
+
+    ## Calibration
+
+    **Only flag issues that would cause real problems during implementation planning.**
+    A missing section, a contradiction, a claim about existing code that looks wrong,
+    or a requirement so ambiguous it could be interpreted two different ways — those are issues.
+    Minor wording improvements, stylistic preferences, and "sections less detailed than others" are not.
+
+    Approve unless there are serious gaps that would lead to a flawed plan.
+
+    ## Output Format
+
+    ## PRP Review
+
+    **Status:** Approved | Issues Found
+
+    **Issues (if any):**
+    - [Section X]: [specific issue] - [why it matters for planning]
+
+    **Recommendations (advisory, do not block approval):**
+    - [suggestions for improvement]
+```
+
+**Reviewer returns:** Status, Issues (if any), Recommendations.
