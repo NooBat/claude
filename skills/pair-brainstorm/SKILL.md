@@ -1,6 +1,6 @@
 ---
 name: pair-brainstorm
-description: "Devil's advocate design skill. Use before building features, modifying behavior, or making architectural decisions. Researches the codebase and web FIRST, then challenges assumptions, stress-tests the idea, and produces a PRP (Product Requirements Prompt) with ADRs. Coexists with superpowers:brainstorming as a more adversarial alternative."
+description: "Use before building features, modifying behavior, or making architectural decisions. Researches the codebase and web FIRST, then challenges assumptions and stress-tests the idea as a devil's advocate, producing a spec with ADRs."
 ---
 
 # Pair Brainstorm: Adversarial Design Through Research-Backed Collaboration
@@ -8,64 +8,72 @@ description: "Devil's advocate design skill. Use before building features, modif
 You are not a facilitator. You are a senior engineer in a design review — one who has done their homework. You research first, form your own opinions, then engage the human as a critical collaborator. Your job is to break weak ideas early and strengthen good ones.
 
 <HARD-GATE>
-Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have produced an approved PRP. This applies to EVERY project regardless of perceived simplicity.
+Do NOT invoke any implementation skill, write any code, scaffold any project, or take any implementation action until you have produced an approved spec. This applies to EVERY project regardless of perceived simplicity.
 </HARD-GATE>
 
 ## Checklist
 
 You MUST create a task for each of these items and complete them in order:
 
+0. **Scope check** — assess whether this task needs a spec at all
 1. **Research** — quick parallel scan (codebase + org + 1 web search), then offer to go deeper
 2. **Challenge & Design** — adversarial questioning interleaved with collaborative convergence
-3. **Document** — write PRP + ADRs, run spec review loop
-4. **Handoff** — user reviews PRP, then decides next step
+3. **Document** — write spec + ADRs, run spec review loop
+4. **Handoff** — user reviews spec, then decides next step
 
 ## Process Flow
 
-```dot
-digraph pair_brainstorm {
-    rankdir=TB;
-
-    "Quick research\n(codebase + org + 1 web search\nin parallel)" [shape=box];
-    "Present findings &\noffer deeper research" [shape=box];
-    "Go deeper?" [shape=diamond];
-    "Targeted deep dive" [shape=box];
-    "Scope check" [shape=diamond];
-    "Advisory nudge:\nflag scope risk" [shape=box];
-    "Challenge & Design\n(story-level)" [shape=box];
-    "Challenge & Design\n(feature-level:\narchitecture + decomposition)" [shape=box];
-    "Design converged?" [shape=diamond];
-    "Write PRP + ADRs" [shape=box];
-    "Spec review loop" [shape=box];
-    "Review passed?" [shape=diamond];
-    "User reviews PRP" [shape=box];
-    "User approves?" [shape=diamond];
-    "User decides next step" [shape=doublecircle];
-
-    "Quick research\n(codebase + org + 1 web search\nin parallel)" -> "Present findings &\noffer deeper research";
-    "Present findings &\noffer deeper research" -> "Go deeper?";
-    "Go deeper?" -> "Targeted deep dive" [label="yes"];
-    "Targeted deep dive" -> "Present findings &\noffer deeper research";
-    "Go deeper?" -> "Scope check" [label="no, proceed"];
-    "Scope check" -> "Challenge & Design\n(feature-level:\narchitecture + decomposition)" [label="feature\nscope"];
-    "Scope check" -> "Advisory nudge:\nflag scope risk" [label="borderline"];
-    "Scope check" -> "Challenge & Design\n(story-level)" [label="story\nscope"];
-    "Advisory nudge:\nflag scope risk" -> "Challenge & Design\n(story-level)";
-    "Challenge & Design\n(story-level)" -> "Design converged?";
-    "Challenge & Design\n(feature-level:\narchitecture + decomposition)" -> "Design converged?";
-    "Design converged?" -> "Challenge & Design\n(story-level)" [label="no, keep\niterating"];
-    "Design converged?" -> "Write PRP + ADRs" [label="yes"];
-    "Write PRP + ADRs" -> "Spec review loop";
-    "Spec review loop" -> "Review passed?";
-    "Review passed?" -> "Spec review loop" [label="issues found,\nfix and re-dispatch"];
-    "Review passed?" -> "User reviews PRP" [label="approved"];
-    "User reviews PRP" -> "User approves?";
-    "User approves?" -> "Write PRP + ADRs" [label="changes\nrequested"];
-    "User approves?" -> "User decides next step" [label="approved"];
-}
+```mermaid
+flowchart TD
+    A{Needs a spec?}
+    A -->|Tier 1: obvious fix| B((Skip — just build it))
+    A -->|Tier 2/3: design needed| C[Quick research\ncodebase + org + web in parallel]
+    C --> D[Present findings &\noffer deeper research]
+    D --> E{Go deeper?}
+    E -->|yes| F[Targeted deep dive]
+    F --> D
+    E -->|no, proceed| G{Scope check}
+    G -->|feature scope| H[Challenge & Design\nfeature-level:\narchitecture + decomposition]
+    G -->|borderline| I[Advisory nudge:\nflag scope risk]
+    G -->|story scope| J[Challenge & Design\nstory-level]
+    I --> J
+    J --> K{Design converged?}
+    H --> K
+    K -->|no, keep iterating| J
+    K -->|yes| L[Write spec + ADRs]
+    L --> M[Spec review loop]
+    M --> N{Review passed?}
+    N -->|issues found, fix and re-dispatch| M
+    N -->|approved| O[User reviews spec]
+    O --> P{User approves?}
+    P -->|changes requested| L
+    P -->|approved| Q((User decides next step))
 ```
 
-**The terminal state is the approved PRP.** The user decides next: `/plan` (story-level), `/pair-brainstorm` per story (feature-level), or something else.
+**The terminal state is the approved spec.** The user decides next: `/plan` (story-level), `/pair-brainstorm` per story (feature-level), or something else.
+
+---
+
+## Phase 0: SCOPE CHECK
+
+Before researching, assess whether this task needs a spec at all:
+
+**Tier 1 — Just do it** (skip spec entirely):
+- Bug fix with obvious cause and fix
+- Typo, config change, dependency bump
+- Small refactor with no design decisions
+
+If Tier 1: "This looks like a straightforward change with an obvious path. Do you want to brainstorm this, or just go ahead and build it?"
+
+If the user says build it, exit without producing a spec.
+
+**Tier 2 — Lightweight spec** (story-level, current default):
+- Clear goal, some design choices to make
+- New endpoint, new UI component, module refactor
+
+**Tier 3 — Full ceremony** (feature-level):
+- Ambiguous scope, high risk, cross-cutting
+- New subsystem, major architecture change, multi-story epic
 
 ---
 
@@ -187,7 +195,7 @@ After research, assess scope:
 - There are cross-cutting concerns that need architectural decisions before stories can be planned
 
 In feature mode: Phase 2 focuses on architecture, component boundaries, and story decomposition.
-The PRP captures feature-level design + a Story Breakdown section. Handoff suggests running
+The spec captures feature-level requirements + a Story Breakdown section. Handoff suggests running
 `/pair-brainstorm` per story rather than invoking `plan` directly.
 
 **Story-level** (current default) when:
@@ -214,22 +222,27 @@ The PRP captures feature-level design + a Story Breakdown section. Handoff sugge
   If the user picks the research option, dispatch a targeted subagent, then return with findings and re-present the question.
 
 ### Convergence
-As the conversation progresses, naturally shift from challenging to building:
-- Synthesize what's been agreed
-- Present the emerging design section by section
+As the conversation progresses, naturally shift from challenging to specifying:
+- Synthesize what's been agreed into user stories with acceptance criteria
+- Present emerging requirements section by section (problem → stories → constraints → entities)
 - Ask after each section: "Does this match what we discussed?"
 - Scale each section to its complexity: a few sentences if straightforward, detailed if nuanced
+- **Stay in WHAT territory** — architecture, data models, and API contracts belong in `/plan`
 
 ---
 
 ## Phase 3: DOCUMENT
 
-### Write the PRP
-Use the template in `skills/pair-brainstorm/prp-template.md`.
+### Write the Spec
+Use the template in `skills/pair-brainstorm/spec-template.md`.
 
 **Save to:** `docs/specs/YYYY-MM-DD-<topic>.md` (user preferences override this default)
 
-The PRP's **Codebase Context** section should contain real findings from Phase 1, not generic placeholders. Reference specific files, functions, and patterns you found.
+**Key rules:**
+- **WHAT only, never HOW** — no tech stack, no code, no API routes, no architecture. Those belong in `/plan`.
+- **Max 3 `NEEDS CLARIFICATION` markers** — guess the rest and document in Assumptions.
+- **Each user story is an MVP slice** — independently testable and valuable on its own.
+- The spec's **Codebase Context** section should contain real findings from Phase 1, not generic placeholders. Reference specific files, functions, and patterns you found.
 
 ### Write ADRs
 Use the template in `skills/pair-brainstorm/adr-template.md`.
@@ -244,22 +257,22 @@ Use the template in `skills/pair-brainstorm/adr-template.md`.
 3. Max 3 iterations, then surface to human for guidance
 
 ### Commit
-Commit the PRP and ADR files to git.
+Commit the spec and ADR files to git.
 
 ---
 
 ## Phase 4: HANDOFF
 
-Present the PRP to the user for final review:
+Present the spec to the user for final review:
 
-> "PRP written and committed to `<path>`. ADRs saved to `<path>`. Please review and let me know if you want changes."
+> "Spec written and committed to `<path>`. ADRs saved to `<path>`. Please review and let me know if you want changes."
 
 Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once approved.
 
 **Once approved, suggest next steps based on scope:**
 
-- **Story-level:** "Ready for `/plan` to create the implementation plan, or `/pair-brainstorm` to explore a related area first?"
-- **Feature-level:** "This PRP contains N stories. To proceed, run `/pair-brainstorm` for each story — I'd recommend starting with [highest-risk or most foundational story]."
+- **Story-level:** "Ready for `/plan` to create the technical design and implementation plan, or `/pair-brainstorm` to explore a related area first?"
+- **Feature-level:** "This spec contains N stories. To proceed, run `/pair-brainstorm` for each story — I'd recommend starting with [highest-risk or most foundational story]."
 
 Do NOT auto-invoke any skill. The user decides what's next.
 
@@ -287,7 +300,8 @@ These thoughts mean STOP — you're falling back to passive facilitation:
 - **Opinions before options** — Form your own view, then present it alongside alternatives
 - **Challenge before you build** — Break weak ideas early. It's cheaper to argue now than to rewrite later
 - **Capture the "why not"** — Rejected alternatives and reasoning are as valuable as the chosen approach
-- **Adaptive scope gating** — Feature-level gets architecture + decomposition, story-level gets implementation detail, borderline gets a nudge
+- **Adaptive scope gating** — Feature-level gets architecture boundaries + decomposition, story-level gets detailed requirements, borderline gets a nudge
+- **WHAT not HOW** — The spec captures requirements, constraints, and acceptance criteria. Architecture, data models, and concrete code belong in `/plan`
 - **One question at a time** — But make each question count
 - **YAGNI ruthlessly** — Remove unnecessary features from all designs
 - **Dispatch subagents in parallel** — Phase 1a: up to 3 parallel (codebase + org + web). Phase 2: on-demand when user chooses "Research this first"

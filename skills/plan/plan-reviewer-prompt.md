@@ -2,7 +2,7 @@
 
 Use this template when dispatching a plan document reviewer subagent. Provide precisely crafted review context — never your session history.
 
-**Purpose:** Verify the plan is complete, matches the PRP, is grounded in the codebase, and has proper task decomposition.
+**Purpose:** Verify the plan is complete, matches the spec, is grounded in the codebase, and has proper task decomposition.
 
 **Dispatch after:** The complete plan is written.
 
@@ -14,14 +14,14 @@ Agent tool (general-purpose):
     and ready for implementation.
 
     **Plan to review:** [PLAN_FILE_PATH]
-    **PRP for reference:** [PRP_FILE_PATH] (if available)
+    **Spec for reference:** [SPEC_FILE_PATH] (if available)
 
     ## What to Check
 
     | Category | What to Look For |
     |----------|------------------|
     | Completeness | TODOs, placeholders, incomplete tasks, missing steps |
-    | Spec Alignment | Plan covers PRP requirements, no major scope creep, doesn't re-open settled decisions |
+    | Spec Alignment | Plan covers spec requirements, no major scope creep, doesn't re-open settled decisions |
     | Codebase Grounding | Tasks reference real files and functions, not generic placeholders. "Codebase context" notes in tasks should reference actual code. |
     | Task Decomposition | Tasks have clear boundaries, steps are actionable, each step is one action (2-5 min) |
     | Buildability | Could an engineer follow this plan without getting stuck? Are commands exact? Is code complete? |
@@ -33,7 +33,7 @@ Agent tool (general-purpose):
     or getting stuck on an ambiguous step — those are issues.
     Minor wording, stylistic preferences, and "nice to have" suggestions are not.
 
-    Approve unless there are serious gaps — missing requirements from the PRP,
+    Approve unless there are serious gaps — missing requirements from the spec,
     contradictory steps, placeholder content, tasks so vague they can't be acted on,
     or references to code that doesn't exist.
 

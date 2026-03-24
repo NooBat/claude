@@ -1,6 +1,6 @@
 ---
 name: plan
-description: "Codebase-aware implementation planning. Scans the codebase before writing plans to find reusable code, understand existing patterns, and avoid reinventing. Accepts a PRP as input (preferred) or gathers requirements ad-hoc. Produces a detailed implementation plan with full codebase context."
+description: "Use when you have a spec or requirements and need to create a codebase-aware implementation plan with technical design and phased tasks. Scans the codebase to find reusable code and existing patterns before planning."
 ---
 
 # Plan: Codebase-Aware Implementation Planning
@@ -15,65 +15,49 @@ Write implementation plans that are grounded in what actually exists. Before wri
 
 You MUST create a task for each of these items and complete them in order:
 
-1. **Ingest PRP** (or gather requirements ad-hoc)
+1. **Ingest spec** (or gather requirements ad-hoc)
 2. **Codebase scan** — broad architecture scan + targeted deep dives
-3. **Reconcile** — cross-check PRP assumptions against codebase reality
-4. **Write plan** — implementation plan with full codebase context
+3. **Reconcile** — cross-check spec assumptions against codebase reality
+4. **Write plan** — technical design + phased implementation tasks with concrete code
 5. **Review & handoff** — plan review loop, user approval, execution handoff
 
 ## Process Flow
 
-```dot
-digraph plan {
-    rankdir=TB;
-
-    "PRP exists?" [shape=diamond];
-    "Read PRP, extract\nscope & context" [shape=box];
-    "Ad-hoc: ask 2-3\nrequirements questions" [shape=box];
-    "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)" [shape=box];
-    "Targeted deep dives\n(files to modify, functions to reuse,\ntest patterns, integration points)" [shape=box];
-    "Reconcile PRP vs\ncodebase reality" [shape=box];
-    "Significant\nmismatches?" [shape=diamond];
-    "Report to user,\nresolve conflicts" [shape=box];
-    "Write implementation\nplan" [shape=box];
-    "Plan review loop" [shape=box];
-    "Review passed?" [shape=diamond];
-    "User reviews plan" [shape=box];
-    "User approves?" [shape=diamond];
-    "Execution handoff" [shape=doublecircle];
-
-    "PRP exists?" -> "Read PRP, extract\nscope & context" [label="yes"];
-    "PRP exists?" -> "Ad-hoc: ask 2-3\nrequirements questions" [label="no"];
-    "Read PRP, extract\nscope & context" -> "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)";
-    "Ad-hoc: ask 2-3\nrequirements questions" -> "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)";
-    "Broad architecture scan\n(project structure, shared utils,\ntest infra, build system)" -> "Targeted deep dives\n(files to modify, functions to reuse,\ntest patterns, integration points)";
-    "Targeted deep dives\n(files to modify, functions to reuse,\ntest patterns, integration points)" -> "Reconcile PRP vs\ncodebase reality";
-    "Reconcile PRP vs\ncodebase reality" -> "Significant\nmismatches?";
-    "Significant\nmismatches?" -> "Report to user,\nresolve conflicts" [label="yes"];
-    "Significant\nmismatches?" -> "Write implementation\nplan" [label="no"];
-    "Report to user,\nresolve conflicts" -> "Write implementation\nplan";
-    "Write implementation\nplan" -> "Plan review loop";
-    "Plan review loop" -> "Review passed?";
-    "Review passed?" -> "Plan review loop" [label="issues found,\nfix and re-dispatch"];
-    "Review passed?" -> "User reviews plan" [label="approved"];
-    "User reviews plan" -> "User approves?";
-    "User approves?" -> "Write implementation\nplan" [label="changes\nrequested"];
-    "User approves?" -> "Execution handoff" [label="approved"];
-}
+```mermaid
+flowchart TD
+    A{Spec exists?}
+    A -->|yes| B[Read spec, extract\nscope & context]
+    A -->|no| C[Ad-hoc: ask 2-3\nrequirements questions]
+    B --> D[Broad architecture scan\nproject structure, shared utils,\ntest infra, build system]
+    C --> D
+    D --> E[Targeted deep dives\nfiles to modify, functions to reuse,\ntest patterns, integration points]
+    E --> F[Reconcile spec vs\ncodebase reality]
+    F --> G{Significant\nmismatches?}
+    G -->|yes| H[Report to user,\nresolve conflicts]
+    G -->|no| I[Write technical design\n+ phased tasks]
+    H --> I
+    I --> J[Plan review loop]
+    J --> K{Review passed?}
+    K -->|issues found, fix and re-dispatch| J
+    K -->|approved| L[User reviews plan]
+    L --> M{User approves?}
+    M -->|changes requested| I
+    M -->|approved| N((Execution handoff))
 ```
 
 ---
 
-## Phase 1: INGEST PRP
+## Phase 1: INGEST SPEC
 
-### If PRP exists:
-- Read the PRP file
+### If spec exists:
+- Read the spec file
 - Extract the **Codebase Context** section (research findings from pair-brainstorm)
+- Extract **User Stories** with priorities — these define the plan's phases
 - Extract scope, constraints, boundaries, and success criteria
 - Note the **Decisions Log** — these decisions are settled; do not re-open them
 - Note **Open Questions** — these need to be resolved during planning
 
-### If no PRP (ad-hoc mode):
+### If no spec (ad-hoc mode):
 - Ask 2-3 focused requirements questions:
   - What are you building? (scope)
   - What constraints exist? (technical limits, patterns to follow)
@@ -81,7 +65,7 @@ digraph plan {
 - Then proceed to Phase 2
 
 ### Scope Check
-If the PRP (or ad-hoc scope) covers multiple independent subsystems, suggest breaking into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+If the spec (or ad-hoc scope) covers multiple independent subsystems, suggest breaking into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
 
 ---
 
@@ -98,7 +82,7 @@ Understand the project landscape:
 - **Code conventions:** naming, file organization, error handling patterns
 
 ### Pass 2: Targeted Deep Dives
-Zoom into areas the PRP touches:
+Zoom into areas the spec touches:
 - **Files to modify or extend:** read them, understand their structure
 - **Functions to reuse:** identify specific functions/classes that can be leveraged
 - **Existing test patterns:** how are tests written for similar functionality?
@@ -106,34 +90,34 @@ Zoom into areas the PRP touches:
 
 **Dispatch subagents freely.** Examples:
 - One agent scans shared utilities and common patterns
-- Another explores the specific modules the PRP targets
+- Another explores the specific modules the spec targets
 - A third reviews test infrastructure and conventions
 
 ---
 
 ## Phase 3: RECONCILE
 
-Cross-check the PRP's assumptions against what you actually found. This phase catches the "plans in a vacuum" problem.
+Cross-check the spec's assumptions against what you actually found. This phase catches the "plans in a vacuum" problem.
 
 ### Validate Assumptions
-- Does the PRP's Codebase Context match reality?
+- Does the spec's Codebase Context match reality?
 - Are the "established patterns" it references still current?
 - Are the "reusable components" it lists still available and appropriate?
 
 ### Identify Reuse Opportunities
-- Functions/modules the PRP missed that could reduce implementation work
+- Functions/modules the spec missed that could reduce implementation work
 - Existing test utilities that can be leveraged
 - Patterns in adjacent code that should be followed
 
 ### Flag Conflicts
 - Proposed architecture conflicting with existing patterns
 - Data flow assumptions that don't match actual interfaces
-- Dependencies that have changed since the PRP was written
+- Dependencies that have changed since the spec was written
 
 ### Report
 - **If no significant mismatches:** proceed silently to Phase 4
 - **If significant mismatches found:** report to the user with specifics:
-  > "The PRP says X, but the codebase actually does Y. This affects the design because Z. How should we proceed?"
+  > "The spec says X, but the codebase actually does Y. This affects the design because Z. How should we proceed?"
 
   Wait for the user to resolve the conflict before proceeding.
 
@@ -151,14 +135,42 @@ Every plan MUST start with:
 
 **Goal:** [One sentence describing what this builds]
 
-**Architecture:** [2-3 sentences about approach]
-
 **Tech Stack:** [Key technologies/libraries]
 
-**PRP Reference:** [path to PRP if one exists]
+**Spec Reference:** [path to spec if one exists]
 
 ---
 ```
+
+### Technical Design
+
+**This section is the HOW** — architecture, data models, API contracts, error handling. It contains concrete types, routes, and error behavior that executing agents implement against. The contract is rigid; the implementation is flexible.
+
+```markdown
+## Technical Design
+
+### Architecture
+<!-- High-level component structure: what are the main pieces and how do they relate?
+     2-3 sentences + a list of components with one-line descriptions. -->
+
+### Data Model
+<!-- Concrete types/interfaces — agents use these exactly.
+     Include field names, types, relationships. -->
+
+### API Contracts (if applicable)
+<!-- Exact routes, request/response shapes, error codes.
+     Agents don't invent these — they implement what's here. -->
+
+### Error Handling
+<!-- Specific error scenarios and exact responses.
+     "Timeout after 30s → set status='failed'" not "handle timeouts appropriately" -->
+
+### Testing Strategy
+<!-- What to test at each level: unit, integration, e2e.
+     Reference specific functions/components. -->
+```
+
+**Detail level guidance:** Include concrete types with field names, exact API routes with request/response shapes, specific error scenarios with exact responses. Do NOT prescribe function bodies — that's what the task steps are for.
 
 ### File Structure
 Before defining tasks, map out which files will be created or modified:
@@ -167,19 +179,29 @@ Before defining tasks, map out which files will be created or modified:
 - Follow established codebase patterns
 - Reference specific existing files discovered in the codebase scan
 
-### Task Structure
+### Phased Task Structure
+
+Tasks are organized into phases aligned with the spec's user stories. Each phase ends with a checkpoint — a working, testable increment.
+
+**Task format:** `- [ ] T001 [P?] [US?] Description with exact file path`
+- `[P]` = parallelizable (different files, no dependencies — can dispatch to parallel subagents)
+- `[US1]` = which user story this task serves
 
 ````markdown
-### Task N: [Component Name]
+## Phase 1: Setup
+- [ ] T001 Create project structure per technical design
+- [ ] T002 [P] Configure dependencies
 
-**Files:**
-- Create: `exact/path/to/file.py`
-- Modify: `exact/path/to/existing.py` (reuses: `existing_function()` from scan)
-- Test: `tests/exact/path/to/test.py`
+## Phase 2: Foundation (blocking prerequisites)
+- [ ] T003 [foundation description with file path]
 
-**Codebase context:** [Specific findings from scan that inform this task — e.g., "Follow the pattern in `src/auth/middleware.py` which uses dependency injection for testability"]
+**Checkpoint:** Foundation ready, base infrastructure works
 
-- [ ] **Step 1: Write the failing test**
+## Phase 3: [US1 Story Title] (P1 — MVP)
+**Goal:** [from spec's US1]
+**Acceptance Test:** [from spec's US1 acceptance criteria]
+
+- [ ] T004 [US1] Write failing test for [acceptance criterion]
 
 ```python
 def test_specific_behavior():
@@ -187,40 +209,44 @@ def test_specific_behavior():
     assert result == expected
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] T005 [US1] Run test to verify it fails
 
 Run: `pytest tests/path/test.py::test_name -v`
-Expected: FAIL with "function not defined"
+Expected: FAIL
 
-- [ ] **Step 3: Write minimal implementation**
+- [ ] T006 [US1] Implement [component] in `path/to/file`
 
 ```python
 def function(input):
     return expected
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [ ] T007 [US1] Run test to verify it passes
 
 Run: `pytest tests/path/test.py::test_name -v`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [ ] T008 [US1] Commit
 
-```bash
-git add tests/path/test.py src/path/file.py
-git commit -m "feat: add specific feature"
-```
+**Checkpoint:** US1 independently functional — can stop here and have shippable software
+
+## Phase 4: [US2 Story Title] (P2)
+[Same structure as Phase 3]
+
+## Phase N: Polish
+- [ ] TXXX [P] Final integration test
+- [ ] TXXX [P] Cleanup
 ````
 
 ### Task Granularity
-- Each step is one action (2-5 minutes)
-- TDD cycle when appropriate: failing test -> verify failure -> implement -> verify pass -> commit
+- TDD cycle: failing test → verify failure → implement → verify pass → commit
 - Each task references specific existing files/functions discovered in the scan
 - Complete code in plan (not "add validation" — show the validation code)
 - Exact commands with expected output
+- **MVP-first:** You can stop after Phase 3 and have shippable software
 
 ### Carrying Forward Decisions
-- The plan inherits the PRP's Decisions Log
+- The plan inherits the spec's Decisions Log
 - Do NOT re-open settled decisions
 - If the codebase scan reveals new information that challenges a decision, flag it in Phase 3 (RECONCILE), don't silently override
 
@@ -258,10 +284,12 @@ After user approves:
 
 ## Key Principles
 
-- **Always scan the codebase before planning** — even if the PRP has a Codebase Context section, verify it
+- **Always scan the codebase before planning** — even if the spec has a Codebase Context section, verify it
+- **Technical Design before tasks** — concrete types, API contracts, and error handling BEFORE implementation steps
+- **Phased by user story** — each phase maps to a spec user story, each ends with a checkpoint
 - **Reference specific files and functions** in every task — no generic "implement the component" steps
-- **Carry forward decision rationale** — don't re-open settled decisions from the PRP
+- **Carry forward decision rationale** — don't re-open settled decisions from the spec
 - **Dispatch subagents freely** — for parallel codebase exploration
-- **Reconcile before writing** — catch PRP/codebase mismatches early
+- **Reconcile before writing** — catch spec/codebase mismatches early
 - **DRY, YAGNI, TDD** — same engineering principles, now grounded in real code
 - **Exact file paths, complete code, exact commands** — the engineer following this plan should never have to guess
