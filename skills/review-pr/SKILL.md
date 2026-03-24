@@ -117,6 +117,27 @@ Structure your review output in TWO clearly separated sections:
 Put strengths, recommendations, assessment, and any feedback NOT tied to specific
 lines here. This becomes the top-level review body on GitHub.
 
+**Tone: robotic/structured.** Write like a CI report, not a human. Use tables, bullet lists,
+short factual statements. No adjectives, no prose, no bolded praise phrases like "Clean design"
+or "Well-implemented". Just state what happened and whether it's correct.
+
+Example structure:
+```
+## Summary
+| Area | Status |
+|------|--------|
+| Credential routing | ✅ Provider setting now controls path |
+| Dead code removal | ✅ 3 deprecated settings removed |
+| Test coverage | ✅ New routing paths covered |
+
+## Notes
+- `apiBaseUrl` override only applies to GFP path — intentional per PR description
+- Tests still reference `ANTHROPIC_API_KEY` env var (vestigial, non-blocking)
+
+## Verdict
+Ready to merge / Needs fixes / Needs discussion
+```
+
 ### INLINE COMMENTS
 For every issue tied to specific code, output a JSON array. Each entry:
 
@@ -134,20 +155,32 @@ Rules:
 - side: "RIGHT" for new/changed code, "LEFT" for deleted code
 - Prefix the body with: **Critical:**, **Important:**, **Minor:**, or **Insight:**
 
+**Tone: human/conversational.** Write inline comments like a teammate, not a linter.
+Be direct but friendly. Use "you" and "we". Ask questions. Explain the *why*.
+Don't write formal topic sentences — just say what you see and what you'd suggest.
+
+Good: "This'll break if `provider` is ever `undefined` — the `else` branch assumes it's always `\"anthropic\"`. Worth a guard?"
+Bad: "**Important:** The else branch assumes the provider is always 'anthropic'. Consider adding a guard clause for undefined values."
+
+Good: "Nice catch exporting this — kills the duplicate string problem."
+Bad: "**Insight:** Exporting SECRET_KEY eliminates duplicate string literals across modules."
+
+Still use the severity prefix (**Critical:**/**Important:**/**Minor:**/**Insight:**) but write the rest conversationally.
+
 Output ONLY valid JSON for the array. Example:
 
 INLINE_COMMENTS_JSON:
 [
   {
     "path": "src/foo.ts",
-    "body": "**Important:** This variable is unused after your refactor.",
+    "body": "**Important:** This variable stopped being used after your refactor — safe to remove?",
     "start_line": 42,
     "line": 42,
     "side": "RIGHT"
   },
   {
     "path": "src/bar.ts",
-    "body": "**Minor:** This block duplicates logic from `validate()`. Consider extracting a shared helper.",
+    "body": "**Minor:** This is basically the same logic as `validate()` — might be worth pulling into a shared helper so they don't drift apart.",
     "start_line": 10,
     "line": 25,
     "side": "RIGHT"
@@ -227,5 +260,5 @@ gh pr-review review --submit -R {REPO} $0 \
 
 - Always include `commit_id` / `--commit` to pin the review to the current HEAD — prevents stale comments if the PR is force-pushed.
 - Only comment on lines that appear in the diff. If unsure, move the comment to the general body.
-- The general review body should contain: strengths, non-file-specific recommendations, and the overall assessment/verdict.
-- Inline comments should contain: file-specific issues with severity prefix and actionable fix suggestions.
+- The general review body should be **robotic**: tables, bullets, short factual statements. No prose, no adjectives, no bolded praise. Think CI report.
+- Inline comments should be **human**: conversational, direct, like a teammate. Use "you"/"we", ask questions, explain the why. Still use severity prefixes.
