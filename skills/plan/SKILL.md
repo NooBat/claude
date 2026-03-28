@@ -52,7 +52,7 @@ flowchart TD
 ### If spec exists:
 - Read the spec file
 - Extract the **Codebase Context** section (research findings from pair-brainstorm)
-- Extract **User Stories** with priorities — these define the plan's phases
+- Identify which **User Story** this plan covers — **each plan is scoped to ONE user story**. If the spec has multiple stories, run `/plan` separately for each.
 - Extract scope, constraints, boundaries, and success criteria
 - Note the **Decisions Log** — these decisions are settled; do not re-open them
 - Note **Open Questions** — these need to be resolved during planning
@@ -65,7 +65,7 @@ flowchart TD
 - Then proceed to Phase 2
 
 ### Scope Check
-If the spec (or ad-hoc scope) covers multiple independent subsystems, suggest breaking into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
+Each plan covers **one user story**. If the spec has multiple user stories, run `/plan` for each one separately. If the user tries to plan multiple stories at once, suggest breaking into separate plans.
 
 ---
 
@@ -179,31 +179,22 @@ Before defining tasks, map out which files will be created or modified:
 - Follow established codebase patterns
 - Reference specific existing files discovered in the codebase scan
 
-### Phased Task Structure
+### Task Structure
 
-Tasks are organized into phases aligned with the spec's user stories. Each phase ends with a checkpoint — a working, testable increment.
+Each plan covers one user story. Tasks are split into **Tests** (written first as executable specification) then **Implementation** (making tests green).
 
-**Task format:** `- [ ] T001 [P?] [US?] Description with exact file path`
+**Task format:** `- [ ] T001 [P?] Description with exact file path`
 - `[P]` = parallelizable (different files, no dependencies — can dispatch to parallel subagents)
-- `[US1]` = which user story this task serves
 
 ````markdown
-## Phase 1: Setup
+## Setup (if needed)
 - [ ] T001 Create project structure per technical design
 - [ ] T002 [P] Configure dependencies
 
-## Phase 2: Foundation (blocking prerequisites)
-- [ ] T003 [foundation description with file path]
+## Tests (unit — TDD cycle, write ALL first)
+One behavior per test. Complete, executable test code against the Technical Design's interfaces. Actively discover edge cases beyond the spec.
 
-**Checkpoint:** Foundation ready, base infrastructure works
-
-## Phase 3: [US1 Story Title] (P1 — MVP)
-**Goal:** [from spec's US1]
-
-### Tests (write ALL first — one test per task, discover edge cases)
-Each test is one behavior. Include complete, executable test code written against the Technical Design's interfaces. Actively look for edge cases beyond what the spec listed.
-
-- [ ] T004 [US1] Test: [spec acceptance criterion 1]
+- [ ] T003 Test: [spec acceptance criterion 1]
 
 ```python
 def test_filtered_export_includes_only_matching_rows():
@@ -211,70 +202,70 @@ def test_filtered_export_includes_only_matching_rows():
     ...
 ```
 
-- [ ] T005 [US1] Test: [spec acceptance criterion 2]
+- [ ] T004 Test: [spec acceptance criterion 2]
 
 ```python
 def test_user_can_choose_filename_and_destination():
     ...
 ```
 
-- [ ] T006 [US1] Test: [edge case discovered while writing tests]
+- [ ] T005 Test: [edge case discovered while writing tests]
 
 ```python
 def test_empty_dataset_after_filter_exports_headers_only():
     ...
 ```
 
-- [ ] T007 [US1] Run full test suite — verify all FAIL (not error)
+- [ ] T006 Run unit test suite — verify all FAIL (not error)
 
-Run: `pytest tests/path/test_us1.py -v`
-Expected: All tests FAIL (missing implementation). If any test ERRORS, fix the test first — errors mean broken test code, not missing behavior.
+Run: `pytest tests/unit/test_story.py -v`
+Expected: All FAIL (missing implementation). If any ERROR, fix the test — errors mean broken test code, not missing behavior.
 
-### Implementation (make tests green one by one)
+## Implementation (make unit tests green)
 Each task references which test(s) it makes green by task ID.
 
-- [ ] T008 [US1] Implement [core component] in `path/to/file` → T004, T005 pass
+- [ ] T007 Implement [core component] in `path/to/file` → T003, T004 pass
 
 ```python
 def function(input):
     return expected
 ```
 
-- [ ] T009 [US1] Handle [edge case] in `path/to/file` → T006 passes
+- [ ] T008 Handle [edge case] in `path/to/file` → T005 passes
 
 ```python
 # edge case handling code
 ```
 
-- [ ] T010 [US1] Run full suite — verify ALL green + no regressions
+- [ ] T009 Run unit suite — verify ALL green + no regressions
+- [ ] T010 Refactor while green (clean up, extract helpers, improve names)
+- [ ] T011 Run unit suite — verify still ALL green after refactor
 
-Run: `pytest tests/path/test_us1.py -v`
-Expected: ALL PASS
+## Integration Tests (post-implementation verification)
+Verify components work together. Written after implementation, not part of TDD cycle.
 
-- [ ] T011 [US1] Refactor while green (clean up, extract helpers, improve names)
-- [ ] T012 [US1] Run full suite — verify still ALL green after refactor
-- [ ] T013 [US1] Commit
+- [ ] T012 Integration test: [end-to-end scenario from spec acceptance criteria]
 
-**Checkpoint:** US1 independently functional — can stop here and have shippable software
+```python
+def test_full_export_roundtrip():
+    # test against real components, not mocks
+    ...
+```
 
-## Phase 4: [US2 Story Title] (P2)
-[Same structure as Phase 3: Tests first, then Implementation]
-
-## Phase N: Polish
-- [ ] TXXX [P] Final integration test across all user stories
-- [ ] TXXX [P] Cleanup
+- [ ] T013 Run integration suite — verify PASS
+- [ ] T014 Commit
 ````
 
 ### Task Granularity
-- **Tests-first:** Write ALL tests for a phase before any implementation. Tests are the executable specification.
+- **Unit tests first:** Write ALL unit tests before implementation. They're the executable specification and drive the TDD cycle.
 - **One behavior per test task** — each test task has one test function with complete code
 - **Edge case discovery** — actively look for edge cases while writing tests, beyond what the spec listed
-- **Implementation references tests** — each implementation task says which test(s) it makes green (e.g., "→ T004, T005 pass")
-- **Refactor step** — after all tests are green, refactor while staying green, verify, then commit
-- **FAIL vs ERROR** — when running the full suite after writing tests, all tests should FAIL (missing behavior), not ERROR (broken test code)
+- **Implementation references tests** — each implementation task says which test(s) it makes green (e.g., "→ T003, T004 pass")
+- **Refactor step** — after all unit tests are green, refactor while staying green, verify
+- **Integration tests after implementation** — verify components work together. Not part of TDD cycle.
+- **FAIL vs ERROR** — unit tests should FAIL (missing behavior), not ERROR (broken test code)
 - Complete code in plan (not "add validation" — show the validation code)
 - Exact commands with expected output
-- **MVP-first:** You can stop after Phase 3 and have shippable software
 
 ### Carrying Forward Decisions
 - The plan inherits the spec's Decisions Log

@@ -27,30 +27,25 @@ You MUST create a task for each of these items and complete them in order:
 flowchart TD
     A{Needs a spec?}
     A -->|Tier 1: obvious fix| B((Skip — just build it))
-    A -->|Tier 2/3: design needed| C[Quick research\ncodebase + org + optional web\n~60s budget, no permission gates]
+    A -->|needs design| C[Quick research\ncodebase + org + optional web\n~60s budget, no permission gates]
     C --> D[Present findings &\noffer deeper research]
     D --> E{Go deeper?}
     E -->|yes| F[Targeted deep dive]
     F --> D
-    E -->|no, proceed| G{Scope check}
-    G -->|feature scope| H[Challenge & Design\nfeature-level:\narchitecture + decomposition]
-    G -->|borderline| I[Advisory nudge:\nflag scope risk]
-    G -->|story scope| J[Challenge & Design\nstory-level]
-    I --> J
-    J --> K{Design converged?}
-    H --> K
-    K -->|no, keep iterating| J
-    K -->|yes| L[Write spec + ADRs]
-    L --> M[Spec review loop]
-    M --> N{Review passed?}
-    N -->|issues found, fix and re-dispatch| M
-    N -->|approved| O[User reviews spec]
-    O --> P{User approves?}
-    P -->|changes requested| L
-    P -->|approved| Q((User decides next step))
+    E -->|no, proceed| G[Challenge & Design\nadversarial questioning\nuser stories emerge naturally]
+    G --> H{Design converged?}
+    H -->|no, keep iterating| G
+    H -->|yes| I[Write spec + ADRs]
+    I --> J[Spec review loop]
+    J --> K{Review passed?}
+    K -->|issues found, fix and re-dispatch| J
+    K -->|approved| L[User reviews spec]
+    L --> M{User approves?}
+    M -->|changes requested| I
+    M -->|approved| N((Run /plan per user story))
 ```
 
-**The terminal state is the approved spec.** The user decides next: `/plan` (story-level), `/pair-brainstorm` per story (feature-level), or something else.
+**The terminal state is the approved spec.** The spec contains one or more user stories that emerged from the design conversation. Next step: run `/plan` for each story.
 
 ---
 
@@ -58,22 +53,18 @@ flowchart TD
 
 Before researching, assess whether this task needs a spec at all:
 
-**Tier 1 — Just do it** (skip spec entirely):
+**Skip spec** (just build it):
 - Bug fix with obvious cause and fix
 - Typo, config change, dependency bump
 - Small refactor with no design decisions
 
-If Tier 1: "This looks like a straightforward change with an obvious path. Do you want to brainstorm this, or just go ahead and build it?"
+If trivial: "This looks like a straightforward change with an obvious path. Do you want to brainstorm this, or just go ahead and build it?"
 
 If the user says build it, exit without producing a spec.
 
-**Tier 2 — Lightweight spec** (story-level, current default):
-- Clear goal, some design choices to make
-- New endpoint, new UI component, module refactor
-
-**Tier 3 — Full ceremony** (feature-level):
-- Ambiguous scope, high risk, cross-cutting
-- New subsystem, major architecture change, multi-story epic
+**Needs spec** (proceed to Phase 1):
+- Any work involving design choices, new components, or architectural decisions
+- The number of user stories is discovered during Phase 2, not decided here
 
 ---
 
@@ -173,44 +164,14 @@ For each alternative, provide:
 - "What's the migration path if requirements change?"
 - "Who maintains this and what does that look like in 6 months?"
 
-### Feature-Level Focus
+**Decompose into user stories:**
+As the scope becomes clear, identify independently valuable slices of work:
+- "What are the natural boundaries? Where does one deliverable end and another begin?"
+- "Can these be worked on independently, or do they have hard dependencies?"
+- "Which piece is the riskiest or most foundational? That should be US1."
+- "Is each story independently shippable? If not, it's too big — split it further."
 
-When in feature mode, shift adversarial questioning toward:
-
-**Architecture & boundaries:**
-- "What are the natural component boundaries? Where does one story end and another begin?"
-- "What shared interfaces or contracts do stories need to agree on?"
-- "Which cross-cutting concerns (auth, error handling, data schemas) must be decided before stories can proceed independently?"
-
-**Story decomposition:**
-- "Can these stories be worked on in parallel, or do they have hard dependencies?"
-- "Which story is the riskiest? Should it go first?"
-- "Is each story independently shippable, or are there integration milestones?"
-
-**Do NOT go into story-level implementation detail** — that's what each story's own
-`/pair-brainstorm` session is for. Stay at the level of: what are the stories,
-how do they connect, what architectural decisions bind them together.
-
-### Adaptive Scope Gating
-
-After research, assess scope:
-
-**Feature-level** (switch to feature mode) when:
-- The request spans multiple independent stories or deliverables
-- The scope would require multiple sprints or workstreams
-- There are cross-cutting concerns that need architectural decisions before stories can be planned
-
-In feature mode: Phase 2 focuses on architecture, component boundaries, and story decomposition.
-The spec captures feature-level requirements + a Story Breakdown section. Handoff suggests running
-`/pair-brainstorm` per story rather than invoking `plan` directly.
-
-**Story-level** (current default) when:
-- The request is a single coherent deliverable
-- Scope is ambitious but doesn't need decomposition
-
-**Advisory nudge** (flag risk but allow override) when:
-- Borderline — could be one story or might need splitting
-- Edge cases suggest scope might grow during implementation
+The number of user stories emerges from the conversation. Could be 1, could be 5. Each must be independently valuable and testable.
 
 ### Conversation Rules
 - **One question per message** — but each question is informed by your research
@@ -275,10 +236,9 @@ Present the spec to the user for final review:
 
 Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once approved.
 
-**Once approved, suggest next steps based on scope:**
+**Once approved, suggest next step:**
 
-- **Story-level:** "Ready for `/plan` to create the technical design and implementation plan, or `/pair-brainstorm` to explore a related area first?"
-- **Feature-level:** "This spec contains N stories. To proceed, run `/pair-brainstorm` for each story — I'd recommend starting with [highest-risk or most foundational story]."
+> "Ready for `/plan`. This spec has N user stories — run `/plan` for each, starting with [US1 / highest-risk story]."
 
 Do NOT auto-invoke any skill. The user decides what's next.
 
@@ -306,7 +266,7 @@ These thoughts mean STOP — you're falling back to passive facilitation:
 - **Opinions before options** — Form your own view, then present it alongside alternatives
 - **Challenge before you build** — Break weak ideas early. It's cheaper to argue now than to rewrite later
 - **Capture the "why not"** — Rejected alternatives and reasoning are as valuable as the chosen approach
-- **Adaptive scope gating** — Feature-level gets architecture boundaries + decomposition, story-level gets detailed requirements, borderline gets a nudge
+- **User stories emerge from design** — The number of stories is an output of the conversation, not an input. Each must be independently valuable and testable.
 - **WHAT not HOW** — The spec captures requirements, constraints, and acceptance criteria. Architecture, data models, and concrete code belong in `/plan`
 - **One question at a time** — But make each question count
 - **YAGNI ruthlessly** — Remove unnecessary features from all designs
