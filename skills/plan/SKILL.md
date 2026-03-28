@@ -181,91 +181,9 @@ Before defining tasks, map out which files will be created or modified:
 
 ### Task Structure
 
-Each plan covers one user story. Tasks are split into **Tests** (written first as executable specification) then **Implementation** (making tests green).
-
-**Task format:** `- [ ] T001 [P?] Description with exact file path`
-- `[P]` = parallelizable (different files, no dependencies — can dispatch to parallel subagents)
-
-````markdown
-## Setup (if needed)
-- [ ] T001 Create project structure per technical design
-- [ ] T002 [P] Configure dependencies
-
-## Tests (unit — TDD cycle, write ALL first)
-One behavior per test. Complete, executable test code against the Technical Design's interfaces. Actively discover edge cases beyond the spec.
-
-- [ ] T003 Test: [spec acceptance criterion 1]
-
-```python
-def test_filtered_export_includes_only_matching_rows():
-    # test code against Technical Design interfaces
-    ...
-```
-
-- [ ] T004 Test: [spec acceptance criterion 2]
-
-```python
-def test_user_can_choose_filename_and_destination():
-    ...
-```
-
-- [ ] T005 Test: [edge case discovered while writing tests]
-
-```python
-def test_empty_dataset_after_filter_exports_headers_only():
-    ...
-```
-
-- [ ] T006 Run unit test suite — verify all FAIL (not error)
-
-Run: `pytest tests/unit/test_story.py -v`
-Expected: All FAIL (missing implementation). If any ERROR, fix the test — errors mean broken test code, not missing behavior.
-
-## Implementation (make unit tests green)
-Each task references which test(s) it makes green by task ID.
-
-- [ ] T007 Implement [core component] in `path/to/file` → T003, T004 pass
-
-```python
-def function(input):
-    return expected
-```
-
-- [ ] T008 Handle [edge case] in `path/to/file` → T005 passes
-
-```python
-# edge case handling code
-```
-
-- [ ] T009 Run unit suite — verify ALL green + no regressions
-- [ ] T010 Refactor while green (clean up, extract helpers, improve names)
-- [ ] T011 Run unit suite — verify still ALL green after refactor
-
-## Integration Tests (post-implementation verification)
-Verify components work together. Written after implementation, not part of TDD cycle.
-
-- [ ] T012 Integration test: [end-to-end scenario from spec acceptance criteria]
-
-```python
-def test_full_export_roundtrip():
-    # test against real components, not mocks
-    ...
-```
-
-- [ ] T013 Run integration suite — verify PASS
-- [ ] T014 Commit
-````
-
-### Task Granularity
-- **Unit tests first:** Write ALL unit tests before implementation. They're the executable specification and drive the TDD cycle.
-- **One behavior per test task** — each test task has one test function with complete code
-- **Edge case discovery** — actively look for edge cases while writing tests, beyond what the spec listed
-- **Implementation references tests** — each implementation task says which test(s) it makes green (e.g., "→ T003, T004 pass")
-- **Refactor step** — after all unit tests are green, refactor while staying green, verify
-- **Integration tests after implementation** — verify components work together. Not part of TDD cycle.
-- **FAIL vs ERROR** — unit tests should FAIL (missing behavior), not ERROR (broken test code)
-- Complete code in plan (not "add validation" — show the validation code)
-- Exact commands with expected output
+Each plan covers one user story (or one refactoring goal). Use the task templates in `skills/plan/task-templates.md` — pick the right variant:
+- **Feature** — adding new behavior. Unit tests first → implementation → integration tests.
+- **Refactoring** — changing structure, behavior stays identical. Green baseline → characterization tests → structural changes.
 
 ### Carrying Forward Decisions
 - The plan inherits the spec's Decisions Log
@@ -308,7 +226,7 @@ After user approves:
 
 - **Always scan the codebase before planning** — even if the spec has a Codebase Context section, verify it
 - **Technical Design before tasks** — concrete types, API contracts, and error handling BEFORE implementation steps
-- **Phased by user story** — each phase maps to a spec user story, each ends with a checkpoint
+- **One plan per user story** — if spec has multiple stories, run `/plan` separately for each
 - **Reference specific files and functions** in every task — no generic "implement the component" steps
 - **Carry forward decision rationale** — don't re-open settled decisions from the spec
 - **Dispatch subagents freely** — for parallel codebase exploration
