@@ -16,7 +16,7 @@ Do NOT invoke any implementation skill, write any code, scaffold any project, or
 You MUST create a task for each of these items and complete them in order:
 
 0. **Scope check** — assess whether this task needs a spec at all
-1. **Research** — quick parallel scan (codebase + org + 1 web search), then offer to go deeper
+1. **Research** — quick parallel scan (codebase + org + optional web), then offer to go deeper
 2. **Challenge & Design** — adversarial questioning interleaved with collaborative convergence
 3. **Document** — write spec + ADRs, run spec review loop
 4. **Handoff** — user reviews spec, then decides next step
@@ -27,7 +27,7 @@ You MUST create a task for each of these items and complete them in order:
 flowchart TD
     A{Needs a spec?}
     A -->|Tier 1: obvious fix| B((Skip — just build it))
-    A -->|Tier 2/3: design needed| C[Quick research\ncodebase + org + web in parallel]
+    A -->|Tier 2/3: design needed| C[Quick research\ncodebase + org + optional web\n~60s budget, no permission gates]
     C --> D[Present findings &\noffer deeper research]
     D --> E{Go deeper?}
     E -->|yes| F[Targeted deep dive]
@@ -81,9 +81,9 @@ If the user says build it, exit without producing a spec.
 
 Before asking the human a single question, do your homework — but do it quickly. Research has diminishing returns. Get the high-value signals fast, then let the human direct where to go deeper.
 
-### Phase 1a: QUICK RESEARCH (parallel, ~30-60 seconds)
+### Phase 1a: QUICK RESEARCH (parallel, ~60 seconds max)
 
-Dispatch up to 3 subagents in parallel:
+Dispatch up to 3 subagents in parallel. All research runs autonomously — **no permission gates, no pausing to ask**.
 
 **Codebase Scan** (1 subagent)
 - Project structure, directory layout, key config files
@@ -104,19 +104,25 @@ are directly reusable and follow the same conventions.
 
 If the repo is personal (no org), skip this step.
 
-**Web Research** (1 subagent, parallel)
-Formulate ONE specific question from the user's prompt. Not "research everything about X"
-but "how do [similar projects] handle [the specific challenge]?" Examples:
-- "testability problem with VS Code coupling" → "VS Code extension dependency injection testability"
-- "need a caching layer" → "caching strategies for [their tech stack]"
-- "rethink our auth flow" → "auth architecture patterns [their framework]"
+**Web Research** (1 subagent, parallel — optional)
+Only dispatch if the topic genuinely benefits from external context (unfamiliar domain, new library, industry patterns). Skip for well-understood internal changes.
+
+When dispatched, formulate ONE specific question. Not "research everything about X"
+but "how do [similar projects] handle [the specific challenge]?"
+
+### Research Budget
+
+All research across the entire session is bounded:
+- **Web searches: max 3 total** across all phases. Be selective — each search should answer a specific question. After 3, no more web searches for the rest of the session.
+- **Time: ~60 seconds** for Phase 1a. Present what you have, even if subagents are still running.
+- **No permission gates** — research runs autonomously. The budget is the control, not human approval.
 
 ### Phase 1b: PRESENT & OFFER
 
 Synthesize what you found and present it to the human:
 - What exists in the codebase that's relevant
 - What the org search found (if applicable)
-- What the web search found
+- What the web search found (if dispatched)
 - What questions remain that could benefit from deeper research
 - Initial concerns or conflicts
 
@@ -295,7 +301,7 @@ These thoughts mean STOP — you're falling back to passive facilitation:
 
 ## Key Principles
 
-- **Research before you ask** — Never ask a question you could answer by reading the codebase or searching the web
+- **Research before you ask** — Never ask a question you could answer by reading the codebase or searching the web (within the 3-search budget)
 - **Progressive deepening** — Quick parallel research first, then go deeper only where the human directs
 - **Opinions before options** — Form your own view, then present it alongside alternatives
 - **Challenge before you build** — Break weak ideas early. It's cheaper to argue now than to rewrite later
@@ -304,4 +310,4 @@ These thoughts mean STOP — you're falling back to passive facilitation:
 - **WHAT not HOW** — The spec captures requirements, constraints, and acceptance criteria. Architecture, data models, and concrete code belong in `/plan`
 - **One question at a time** — But make each question count
 - **YAGNI ruthlessly** — Remove unnecessary features from all designs
-- **Dispatch subagents in parallel** — Phase 1a: up to 3 parallel (codebase + org + web). Phase 2: on-demand when user chooses "Research this first"
+- **Dispatch subagents in parallel** — Phase 1a: up to 3 parallel (codebase + org + optional web). Max 3 web searches total, ~60s time budget, no permission gates
