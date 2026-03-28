@@ -199,48 +199,79 @@ Tasks are organized into phases aligned with the spec's user stories. Each phase
 
 ## Phase 3: [US1 Story Title] (P1 — MVP)
 **Goal:** [from spec's US1]
-**Acceptance Test:** [from spec's US1 acceptance criteria]
 
-- [ ] T004 [US1] Write failing test for [acceptance criterion]
+### Tests (write ALL first — one test per task, discover edge cases)
+Each test is one behavior. Include complete, executable test code written against the Technical Design's interfaces. Actively look for edge cases beyond what the spec listed.
+
+- [ ] T004 [US1] Test: [spec acceptance criterion 1]
 
 ```python
-def test_specific_behavior():
-    result = function(input)
-    assert result == expected
+def test_filtered_export_includes_only_matching_rows():
+    # test code against Technical Design interfaces
+    ...
 ```
 
-- [ ] T005 [US1] Run test to verify it fails
+- [ ] T005 [US1] Test: [spec acceptance criterion 2]
 
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: FAIL
+```python
+def test_user_can_choose_filename_and_destination():
+    ...
+```
 
-- [ ] T006 [US1] Implement [component] in `path/to/file`
+- [ ] T006 [US1] Test: [edge case discovered while writing tests]
+
+```python
+def test_empty_dataset_after_filter_exports_headers_only():
+    ...
+```
+
+- [ ] T007 [US1] Run full test suite — verify all FAIL (not error)
+
+Run: `pytest tests/path/test_us1.py -v`
+Expected: All tests FAIL (missing implementation). If any test ERRORS, fix the test first — errors mean broken test code, not missing behavior.
+
+### Implementation (make tests green one by one)
+Each task references which test(s) it makes green by task ID.
+
+- [ ] T008 [US1] Implement [core component] in `path/to/file` → T004, T005 pass
 
 ```python
 def function(input):
     return expected
 ```
 
-- [ ] T007 [US1] Run test to verify it passes
+- [ ] T009 [US1] Handle [edge case] in `path/to/file` → T006 passes
 
-Run: `pytest tests/path/test.py::test_name -v`
-Expected: PASS
+```python
+# edge case handling code
+```
 
-- [ ] T008 [US1] Commit
+- [ ] T010 [US1] Run full suite — verify ALL green + no regressions
+
+Run: `pytest tests/path/test_us1.py -v`
+Expected: ALL PASS
+
+- [ ] T011 [US1] Refactor while green (clean up, extract helpers, improve names)
+- [ ] T012 [US1] Run full suite — verify still ALL green after refactor
+- [ ] T013 [US1] Commit
 
 **Checkpoint:** US1 independently functional — can stop here and have shippable software
 
 ## Phase 4: [US2 Story Title] (P2)
-[Same structure as Phase 3]
+[Same structure as Phase 3: Tests first, then Implementation]
 
 ## Phase N: Polish
-- [ ] TXXX [P] Final integration test
+- [ ] TXXX [P] Final integration test across all user stories
 - [ ] TXXX [P] Cleanup
 ````
 
 ### Task Granularity
-- TDD cycle: failing test → verify failure → implement → verify pass → commit
-- Each task references specific existing files/functions discovered in the scan
+- **Tests-first:** Write ALL tests for a phase before any implementation. Tests are the executable specification.
+- **One behavior per test task** — each test task has one test function with complete code
+- **Edge case discovery** — actively look for edge cases while writing tests, beyond what the spec listed
+- **Implementation references tests** — each implementation task says which test(s) it makes green (e.g., "→ T004, T005 pass")
+- **Refactor step** — after all tests are green, refactor while staying green, verify, then commit
+- **FAIL vs ERROR** — when running the full suite after writing tests, all tests should FAIL (missing behavior), not ERROR (broken test code)
 - Complete code in plan (not "add validation" — show the validation code)
 - Exact commands with expected output
 - **MVP-first:** You can stop after Phase 3 and have shippable software
