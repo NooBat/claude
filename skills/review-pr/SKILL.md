@@ -2,7 +2,6 @@
 name: review-pr
 description: Use when reviewing a GitHub pull request - dispatches code-reviewer subagent, reads changed files, and posts structured review with inline line-range comments to GitHub
 ---
-
 # Review PR
 
 Dispatch the `superpowers:code-reviewer` subagent to review a GitHub PR, then post the review to GitHub with inline file comments (with line ranges) and a general review body.
@@ -42,21 +41,21 @@ Use `/tmp/pr-review-$0` as the base path for **all file reads** from here on —
 The diff alone only shows what changed. Insightful reviews need to understand **where the code is going** and **what patterns already exist**. Gather:
 
 1. **Related specs/plans** — search for spec/plan docs related to the PR's feature area:
+
    ```bash
    # Check for specs, plans, or design docs mentioned in PR body or related to changed paths
    find specs/ docs/plans/ -name "*.md" 2>/dev/null | head -20
    ```
+
    Read any specs that relate to the PR's feature. These reveal the **destination** — what's planned next, how many more files will follow this pattern, what the full scope looks like.
-
 2. **Sibling files** — read files adjacent to the changed ones that follow (or should follow) the same patterns. This reveals whether the PR is consistent with existing conventions or diverging.
-
 3. **Consumers/callers** — for new APIs, helpers, or exports: who will use them? How many call sites will exist? This reveals whether an abstraction is warranted.
 
 Include all of this in the subagent prompt as `## Architectural Context`.
 
 ### Step 2: Dispatch code-reviewer subagent
 
-Use the Agent tool with `subagent_type: "superpowers:code-reviewer"` (no `isolation` — the worktree from Step 1a is shared).
+Use the Agent tool with `subagent_type: "superpowers:code-reviewer"` and `model: "sonnet"` (no  `isolation` — the worktree from Step 1a is shared).
 
 Include `WORKTREE_PATH` in the subagent prompt and instruct it to read all files from that path (e.g., `{WORKTREE_PATH}/src/foo.ts` instead of `src/foo.ts`). The subagent must read the actual changed files (not just the diff) to understand full context.
 
@@ -123,19 +122,24 @@ or "Well-implemented". Just state what happened and whether it's correct.
 
 Example structure:
 ```
+
 ## Summary
-| Area | Status |
-|------|--------|
+
+| Area               | Status                                |
+| ------------------ | ------------------------------------- |
 | Credential routing | ✅ Provider setting now controls path |
-| Dead code removal | ✅ 3 deprecated settings removed |
-| Test coverage | ✅ New routing paths covered |
+| Dead code removal  | ✅ 3 deprecated settings removed      |
+| Test coverage      | ✅ New routing paths covered          |
 
 ## Notes
+
 - `apiBaseUrl` override only applies to GFP path — intentional per PR description
 - Tests still reference `ANTHROPIC_API_KEY` env var (vestigial, non-blocking)
 
 ## Verdict
+
 Ready to merge / Needs fixes / Needs discussion
+
 ```
 
 ### INLINE COMMENTS
@@ -213,6 +217,7 @@ EOF
 ```
 
 **Event mapping:**
+
 - Reviewer says "Ready to merge? Yes" → `"event": "APPROVE"`
 - Reviewer says "Ready to merge? With fixes" → `"event": "COMMENT"`
 - Reviewer says "Ready to merge? No" → `"event": "REQUEST_CHANGES"`
@@ -228,6 +233,7 @@ git worktree remove /tmp/pr-review-$0
 ### Step 5: Report to user
 
 Show:
+
 - Link to the posted review
 - Summary of how many inline comments were posted
 - The assessment verdict
