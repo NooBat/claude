@@ -1,0 +1,45 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/destructive-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/branch-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/secret-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/exfiltration-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/git-bypass-guard.sh"
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/safe-approver.sh"
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/heuristic-approver.sh"
+          }
+        ]
+      }
+    ]
+  }
+}
