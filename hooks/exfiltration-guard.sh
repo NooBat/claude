@@ -5,6 +5,28 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BLOCK_REASON=""
 
+# is_broad_home_path() — returns 0 if path targets a home directory or system root
+# $1: path string to check
+is_broad_home_path() {
+    local p="$1"
+    [[ "$p" == "/" || "$p" == "/home" || "$p" == "/etc" || "$p" == "~" || \
+       "$p" == '~/'* || "$p" == '$HOME' || "$p" == '$HOME/'* || \
+       "$p" == '${HOME}' || "$p" == '${HOME}/'* || \
+       "$p" == /home/* || "$p" == /Users/* ]]
+}
+
+# cmd_contains_home_path() — returns 0 if command string contains a home-relative path to $1
+# $1: relative path suffix (e.g. ".ssh/", ".netrc")
+# Uses EFFECTIVE_CMD global
+cmd_contains_home_path() {
+    local suffix="$1"
+    [[ "$EFFECTIVE_CMD" == *"~/$suffix"* ]] || \
+    [[ "$EFFECTIVE_CMD" == *'$HOME/'"$suffix"* ]] || \
+    [[ "$EFFECTIVE_CMD" == *'${HOME}/'"$suffix"* ]] || \
+    [[ "$EFFECTIVE_CMD" == */Users/*/"$suffix"* ]] || \
+    [[ "$EFFECTIVE_CMD" == */home/*/"$suffix"* ]]
+}
+
 # is_credential_hunting() — block reading sensitive credential files or searching for secrets
 # $1: single command segment string
 is_credential_hunting() {
@@ -14,27 +36,9 @@ is_credential_hunting() {
 
     case "$BASE_CMD" in
         cat|head|tail|less|more)
-            # Check if targeting sensitive credential paths
-            # Match ~/, $HOME/, and common absolute home prefixes
-            local sensitive_dirs=".ssh/ .aws/ .config/gcloud/"
-            local sensitive_files=".netrc .npmrc"
-            local dir file
-            for dir in $sensitive_dirs; do
-                if [[ "$EFFECTIVE_CMD" == *"~/$dir"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == *'$HOME/'"$dir"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == *'${HOME}/'"$dir"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == */Users/*/"$dir"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == */home/*/"$dir"* ]]; then
-                    BLOCK_REASON="BLOCKED: '$cmd' accesses sensitive credential files — if you need this information, ask the user to provide it directly"
-                    return 0
-                fi
-            done
-            for file in $sensitive_files; do
-                if [[ "$EFFECTIVE_CMD" == *"~/$file"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == *'$HOME/'"$file"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == *'${HOME}/'"$file"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == */Users/*/"$file"* ]] || \
-                   [[ "$EFFECTIVE_CMD" == */home/*/"$file"* ]]; then
+            local path_suffix
+            for path_suffix in .ssh/ .aws/ .config/gcloud/ .netrc .npmrc; do
+                if cmd_contains_home_path "$path_suffix"; then
                     BLOCK_REASON="BLOCKED: '$cmd' accesses sensitive credential files — if you need this information, ask the user to provide it directly"
                     return 0
                 fi
@@ -54,12 +58,7 @@ is_credential_hunting() {
                 path="$tok"
             done
 
-            # Check for broad path
-            local is_broad=0
-            if [[ "$path" == "/" || "$path" == "/home" || "$path" == "/etc" || "$path" == "~" ]]; then
-                is_broad=1
-            fi
-            if (( ! is_broad )); then
+            if ! is_broad_home_path "$path"; then
                 return 1
             fi
 
@@ -143,7 +142,7 @@ is_credential_hunting() {
             local idx=1
             while (( idx < ${#positional[@]} )); do
                 local p="${positional[$idx]}"
-                if [[ "$p" == "/" || "$p" == "/etc" || "$p" == "/home" || "$p" == "~" ]]; then
+                if is_broad_home_path "$p"; then
                     BLOCK_REASON="BLOCKED: '$cmd' accesses sensitive credential files — if you need this information, ask the user to provide it directly"
                     return 0
                 fi
@@ -175,15 +174,16 @@ is_network_exfiltration() {
             while (( i < token_count )); do
                 local tok="${tokens[$i]}"
 
-                # Check --upload-file
-                if [[ "$tok" == "--upload-file" ]]; then
+                # Check --upload-file (both space-separated and =value forms) and -T
+                if [[ "$tok" == "--upload-file" || "$tok" == "--upload-file="* || "$tok" == "-T" ]]; then
                     BLOCK_REASON="BLOCKED: '$cmd' would send local data to an external server — data exfiltration is not permitted"
                     return 0
                 fi
 
-                # Check data flags: -d, --data, --data-binary, --data-urlencode
-                if [[ "$tok" == "-d" || "$tok" == "--data" || "$tok" == "--data-binary" || "$tok" == "--data-urlencode" ]]; then
-                    # Next token should start with @ for file upload
+                # Check data flags: -d, --data, --data-binary, --data-urlencode, --data-raw
+                # Both space-separated (@file) and =@file forms
+                if [[ "$tok" == "-d" || "$tok" == "--data" || "$tok" == "--data-binary" || \
+                      "$tok" == "--data-urlencode" || "$tok" == "--data-raw" ]]; then
                     if (( i + 1 < token_count )); then
                         local next="${tokens[$((i + 1))]}"
                         if [[ "$next" == @* ]]; then
@@ -192,9 +192,15 @@ is_network_exfiltration() {
                         fi
                     fi
                 fi
+                # --data*=@file (inline = forms)
+                if [[ "$tok" == "--data=@"* || "$tok" == "--data-binary=@"* || \
+                      "$tok" == "--data-urlencode=@"* || "$tok" == "--data-raw=@"* ]]; then
+                    BLOCK_REASON="BLOCKED: '$cmd' would send local data to an external server — data exfiltration is not permitted"
+                    return 0
+                fi
 
-                # Check -F with =@ (form file upload)
-                if [[ "$tok" == "-F" ]]; then
+                # Check -F/--form/--form-string with =@ (form file upload)
+                if [[ "$tok" == "-F" || "$tok" == "--form" || "$tok" == "--form-string" ]]; then
                     if (( i + 1 < token_count )); then
                         local next="${tokens[$((i + 1))]}"
                         if [[ "$next" == *=@* ]]; then
@@ -203,9 +209,14 @@ is_network_exfiltration() {
                         fi
                     fi
                 fi
+                # -F embedded in same token: -Ffile=@secret.txt
+                if [[ "$tok" == -F*=@* ]]; then
+                    BLOCK_REASON="BLOCKED: '$cmd' would send local data to an external server — data exfiltration is not permitted"
+                    return 0
+                fi
 
                 # Check for combined form like -d@file (no space)
-                if [[ "$tok" =~ ^-d@|-d\ @ ]]; then
+                if [[ "$tok" =~ ^-d@ ]]; then
                     BLOCK_REASON="BLOCKED: '$cmd' would send local data to an external server — data exfiltration is not permitted"
                     return 0
                 fi
@@ -245,7 +256,7 @@ is_exfiltration() {
     fi
 
     # Handle sudo: strip and recurse
-    extract_base_cmd "$cmd" > /dev/null || return 1
+    # BASE_CMD/EFFECTIVE_CMD already set by is_network_exfiltration's extract_base_cmd call
     if [[ "$BASE_CMD" == "sudo" ]]; then
         local remainder="${EFFECTIVE_CMD#sudo}"
         remainder="${remainder#"${remainder%%[![:space:]]*}"}"  # ltrim
@@ -260,16 +271,14 @@ is_exfiltration() {
 }
 
 # check_cross_segment_exfil() — cross-segment exfiltration patterns
-# $1: name of a bash array containing segments
+# Uses global CROSS_SEGMENTS array (set by caller) to avoid eval on untrusted data
 check_cross_segment_exfil() {
-    local arr_name="$1"
-    # bash 3.2 lacks nameref (local -n); use eval to access the array by name
-    eval "local count=\${#${arr_name}[@]}"
+    local count=${#CROSS_SEGMENTS[@]}
 
     local i=0
     while (( i + 1 < count )); do
-        eval "local seg_a=\"\${${arr_name}[$i]}\""
-        eval "local seg_b=\"\${${arr_name}[$((i + 1))]}\""
+        local seg_a="${CROSS_SEGMENTS[$i]}"
+        local seg_b="${CROSS_SEGMENTS[$((i + 1))]}"
 
         # Extract base commands for both segments
         extract_base_cmd "$seg_a" > /dev/null || { (( i++ )) || true; continue; }
@@ -338,21 +347,21 @@ if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
         exit 0
     fi
 
-    # Collect all segments into an array
-    local_segments=()
+    # Collect all segments into the global array used by check_cross_segment_exfil
+    CROSS_SEGMENTS=()
     while IFS= read -r segment; do
-        local_segments+=("$segment")
+        CROSS_SEGMENTS+=("$segment")
     done < <(parse_chain "$COMMAND")
 
     # Per-segment checks
-    for segment in "${local_segments[@]}"; do
+    for segment in "${CROSS_SEGMENTS[@]}"; do
         if is_exfiltration "$segment"; then
             json_deny "PreToolUse" "$BLOCK_REASON"
         fi
     done
 
     # Cross-segment checks
-    if check_cross_segment_exfil local_segments; then
+    if check_cross_segment_exfil; then
         json_deny "PreToolUse" "$BLOCK_REASON"
     fi
 

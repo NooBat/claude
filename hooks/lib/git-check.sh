@@ -33,8 +33,13 @@ parse_git_subcommand() {
             --no-pager|--no-optional-locks|-P|--paginate|--bare|--literal-pathspecs)
                 (( i++ )) || true
                 ;;
-            -C|--work-tree|-c)
+            -C|--work-tree)
                 # consumes next argument
+                (( i++ )) || true
+                (( i++ )) || true
+                ;;
+            -c)
+                # consumes next argument (key=value); safety policy handled by callers
                 (( i++ )) || true
                 (( i++ )) || true
                 ;;
@@ -74,22 +79,72 @@ is_safe_git_command() {
     local cmd="$1"
     GIT_SUBCMD=""
     GIT_SUBCMD_ARGS=""
+
+    # git -c key=value can set config that causes arbitrary code execution
+    # (e.g. core.pager='bash -c ...'). Rejected here (not in parse_git_subcommand)
+    # because a non-zero return from the parser would abort guard scripts under set -e.
+    if [[ "$cmd" =~ (^|[[:space:]])-c[[:space:]] ]]; then
+        return 1
+    fi
+
     # Call directly (not in a subshell) so GIT_SUBCMD and GIT_SUBCMD_ARGS are set in this shell
     parse_git_subcommand "$cmd" > /dev/null
     local subcmd="$GIT_SUBCMD"
     local subcmd_args="$GIT_SUBCMD_ARGS"
 
-    # Always-safe subcommands
+    # Always-safe subcommands (read-only, no arguments can make them mutate)
     case "$subcmd" in
-        status|diff|log|show|remote|fetch|describe|rev-parse|ls-files|ls-tree|\
-        cat-file|name-rev|shortlog|blame|reflog|for-each-ref|count-objects|\
-        symbolic-ref|worktree)
+        status|diff|log|show|fetch|describe|rev-parse|ls-files|ls-tree|\
+        cat-file|name-rev|shortlog|blame|for-each-ref|count-objects)
             return 0
             ;;
     esac
 
     # Subcommand-specific checks — use $subcmd_args (tokens after subcommand only, not the full command)
     case "$subcmd" in
+        remote)
+            # Safe: bare "git remote", -v, show, get-url (read-only)
+            # Unsafe: add, remove, rename, set-url, set-head, prune (mutating)
+            if [[ -z "$subcmd_args" ]]; then return 0; fi
+            if [[ "$subcmd_args" =~ ^(-v|--verbose|show|get-url)([[:space:]]|$) ]]; then
+                return 0
+            fi
+            return 1
+            ;;
+
+        worktree)
+            # Safe: list (read-only), add (creates isolated copy, non-destructive)
+            # Unsafe: remove, move, prune (destructive)
+            if [[ "$subcmd_args" =~ ^(list|add)([[:space:]]|$) ]]; then
+                return 0
+            fi
+            return 1
+            ;;
+
+        symbolic-ref)
+            # Safe: read-only (single ref arg, optional --short/-q)
+            # Unsafe: setting refs (two positional args)
+            local -a sr_tokens
+            read -r -a sr_tokens <<< "$subcmd_args"
+            local sr_positional=0
+            for tok in "${sr_tokens[@]:-}"; do
+                [[ "$tok" == -* ]] && continue
+                (( sr_positional++ )) || true
+            done
+            # One positional = reading, two+ = setting
+            if (( sr_positional <= 1 )); then return 0; fi
+            return 1
+            ;;
+
+        reflog)
+            # Safe: bare "git reflog", show, list
+            if [[ -z "$subcmd_args" ]]; then return 0; fi
+            if [[ "$subcmd_args" =~ ^(show|list)([[:space:]]|$) ]]; then
+                return 0
+            fi
+            return 1
+            ;;
+
         branch)
             # Safe only if no modify flags present in the args after "branch"
             if [[ "$subcmd_args" =~ (^|[[:space:]])(-D|-d|--delete|-m|--move|-c|--copy|-M)([[:space:]]|$) ]]; then
@@ -128,14 +183,8 @@ is_safe_git_command() {
             ;;
 
         config)
-            # Safe only with read-only flags in args after "config"
+            # Safe only with read-only flags
             if [[ "$subcmd_args" =~ (^|[[:space:]])(--get|--get-all|--get-regexp|--list|-l)([[:space:]]|$) ]]; then
-                return 0
-            fi
-            # Handle --list or -l as the sole arg (no surrounding spaces, end-of-string)
-            if [[ "$subcmd_args" == "--list" || "$subcmd_args" == "-l" || \
-                  "$subcmd_args" == "--get" || "$subcmd_args" == "--get-all" || \
-                  "$subcmd_args" == "--get-regexp" ]]; then
                 return 0
             fi
             return 1

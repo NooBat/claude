@@ -7,7 +7,7 @@ source "$SCRIPT_DIR/git-check.sh"
 source "$SCRIPT_DIR/project-commands.sh"
 
 # Universal safe commands whitelist
-UNIVERSAL_SAFE_COMMANDS="cat head tail less more wc grep rg egrep fgrep find locate ls tree stat file which where type date uptime uname hostname whoami id env printenv pwd df du free top ps lsof echo printf sort uniq diff comm cut tr tee xargs basename dirname realpath readlink cd true false test jq yq column rev nl seq yes time timeout mkdir cp mv touch ln chmod chown export"
+UNIVERSAL_SAFE_COMMANDS="cat head tail less more wc grep rg egrep fgrep locate ls tree stat file which where type date uptime uname hostname whoami id printenv pwd df du free top ps lsof echo printf sort uniq diff comm cut tr tee basename dirname realpath readlink cd true false test jq yq column rev nl seq yes mkdir cp mv touch ln chmod chown export"
 
 # Globals set by extract_base_cmd — avoids subshell so values propagate to caller.
 BASE_CMD=""         # The base command name (path-stripped first word after assignments)
@@ -105,8 +105,10 @@ is_safe_command() {
         return 1
     fi
 
-    # Call extract_base_cmd directly (not in subshell) so globals propagate
-    extract_base_cmd "$cmd" > /dev/null || return 0  # pure assignment, no subshell → safe
+    # Call extract_base_cmd directly (not in subshell) so globals propagate.
+    # Pure assignments are not auto-approvable — they can alter the environment
+    # for subsequent commands in the same shell (e.g. PATH=./malicious && git status).
+    extract_base_cmd "$cmd" > /dev/null || return 1
     local base_cmd="$BASE_CMD"
     local effective="$EFFECTIVE_CMD"
 
