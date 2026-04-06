@@ -401,6 +401,9 @@ assert_true  "protected: git push origin master"               is_dangerous_push
 assert_true  "protected: git push origin HEAD:main"            is_dangerous_push 'git push origin HEAD:main'
 assert_true  "protected: git push origin feature:main"         is_dangerous_push 'git push origin feature:main'
 assert_true  "protected: git push origin :main (delete)"       is_dangerous_push 'git push origin :main'
+assert_true  "protected: git push HEAD:main (no remote)"       is_dangerous_push 'git push HEAD:main'
+assert_true  "protected: git push :main (no remote, delete)"   is_dangerous_push 'git push :main'
+assert_true  "protected: git push main (no remote, bare)"      is_dangerous_push 'git push main'
 
 # Safe push (allowed)
 assert_false "safe: git push origin feature"                   is_dangerous_push 'git push origin feature'
@@ -512,6 +515,10 @@ assert_true  "cred: cat ~/.ssh/id_rsa"                                   is_exfi
 assert_true  "cred: cat ~/.aws/credentials"                              is_exfiltration "cat ~/.aws/credentials"
 assert_true  "cred: cat ~/.config/gcloud/application_default_credentials.json"  is_exfiltration "cat ~/.config/gcloud/application_default_credentials.json"
 assert_true  "cred: cat ~/.netrc"                                        is_exfiltration "cat ~/.netrc"
+assert_true  'cred: cat $HOME/.ssh/id_rsa'                                is_exfiltration 'cat $HOME/.ssh/id_rsa'
+assert_true  'cred: cat ${HOME}/.aws/credentials'                        is_exfiltration 'cat ${HOME}/.aws/credentials'
+assert_true  "cred: cat /Users/foo/.ssh/id_rsa"                          is_exfiltration "cat /Users/foo/.ssh/id_rsa"
+assert_true  "cred: cat /home/user/.ssh/id_rsa"                          is_exfiltration "cat /home/user/.ssh/id_rsa"
 assert_true  "cred: find / -name '*.key'"                                is_exfiltration "find / -name '*.key'"
 assert_true  "cred: find / -name '*.pem'"                                is_exfiltration "find / -name '*.pem'"
 assert_true  "cred: find /home -name id_rsa"                             is_exfiltration "find /home -name id_rsa"

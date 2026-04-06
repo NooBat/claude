@@ -129,6 +129,9 @@ json_allow() {
 json_deny() {
     local event="${1:-PreToolUse}"
     local reason="${2:-blocked}"
+    # Escape backslashes and double quotes to produce valid JSON
+    reason="${reason//\\/\\\\}"
+    reason="${reason//\"/\\\"}"
     printf '{"hookSpecificOutput":{"hookEventName":"%s","permissionDecision":"deny","permissionDecisionReason":"%s"}}\n' "$event" "$reason"
     exit 0
 }

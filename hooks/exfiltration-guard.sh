@@ -15,15 +15,30 @@ is_credential_hunting() {
     case "$BASE_CMD" in
         cat|head|tail|less|more)
             # Check if targeting sensitive credential paths
-            # Use glob matching — regex =~ expands ~ to $HOME
-            if [[ "$EFFECTIVE_CMD" == *"~/.ssh/"* ]] || \
-               [[ "$EFFECTIVE_CMD" == *"~/.aws/"* ]] || \
-               [[ "$EFFECTIVE_CMD" == *"~/.config/gcloud/"* ]] || \
-               [[ "$EFFECTIVE_CMD" == *"~/.netrc"* ]] || \
-               [[ "$EFFECTIVE_CMD" == *"~/.npmrc"* ]]; then
-                BLOCK_REASON="BLOCKED: '$cmd' accesses sensitive credential files — if you need this information, ask the user to provide it directly"
-                return 0
-            fi
+            # Match ~/, $HOME/, and common absolute home prefixes
+            local sensitive_dirs=".ssh/ .aws/ .config/gcloud/"
+            local sensitive_files=".netrc .npmrc"
+            local dir file
+            for dir in $sensitive_dirs; do
+                if [[ "$EFFECTIVE_CMD" == *"~/$dir"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == *'$HOME/'"$dir"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == *'${HOME}/'"$dir"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == */Users/*/"$dir"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == */home/*/"$dir"* ]]; then
+                    BLOCK_REASON="BLOCKED: '$cmd' accesses sensitive credential files — if you need this information, ask the user to provide it directly"
+                    return 0
+                fi
+            done
+            for file in $sensitive_files; do
+                if [[ "$EFFECTIVE_CMD" == *"~/$file"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == *'$HOME/'"$file"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == *'${HOME}/'"$file"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == */Users/*/"$file"* ]] || \
+                   [[ "$EFFECTIVE_CMD" == */home/*/"$file"* ]]; then
+                    BLOCK_REASON="BLOCKED: '$cmd' accesses sensitive credential files — if you need this information, ask the user to provide it directly"
+                    return 0
+                fi
+            done
             return 1
             ;;
         find)

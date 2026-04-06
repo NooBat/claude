@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 BLOCK_REASON=""
 
-# Overridable in tests
-env_exists_check() { ls .env* 2>/dev/null; }
+# Overridable in tests — match .env and .env.* only (not .envrc, .environment, etc.)
+env_exists_check() { compgen -G ".env" 2>/dev/null || compgen -G ".env.*" 2>/dev/null; }
 
 # is_dangerous_add() — returns 0 if dangerous git add, 1 if safe
 # $1: single command segment string

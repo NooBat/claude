@@ -72,22 +72,30 @@ is_dangerous_push() {
         fi
 
         # Positional token
+        local branch=""
         if (( positional_index == 0 )); then
-            # First positional is the remote name — skip it
             positional_index=1
+            # If first positional contains ':' it's a refspec (remote omitted),
+            # e.g. "git push HEAD:main" or "git push :main"
+            if [[ "$tok" == *:* ]]; then
+                branch="${tok##*:}"
+            elif [[ " $PROTECTED_BRANCHES " == *" $tok "* ]]; then
+                # First positional matches a protected branch name directly
+                branch="$tok"
+            fi
+            # Otherwise it's a remote name — no branch to check
         else
             # Refspec: check branch name
-            local branch
             if [[ "$tok" == *:* ]]; then
                 branch="${tok##*:}"  # part after the last colon
             else
                 branch="$tok"
             fi
+        fi
 
-            if [[ " $PROTECTED_BRANCHES " == *" $branch "* ]]; then
-                BLOCK_REASON="BLOCKED: pushing to protected branch '$branch' is not allowed — push to a feature branch and create a pull request instead"
-                return 0
-            fi
+        if [[ -n "$branch" ]] && [[ " $PROTECTED_BRANCHES " == *" $branch "* ]]; then
+            BLOCK_REASON="BLOCKED: pushing to protected branch '$branch' is not allowed — push to a feature branch and create a pull request instead"
+            return 0
         fi
 
         (( i++ )) || true
