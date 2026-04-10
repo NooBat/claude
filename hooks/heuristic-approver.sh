@@ -5,6 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 source "$SCRIPT_DIR/lib/common.sh"
 source "$SCRIPT_DIR/lib/command-check.sh"
+source "$SCRIPT_DIR/lib/subshell.sh"
 
 # Guard: jq required to parse stdin
 if ! command -v jq &>/dev/null; then
@@ -34,14 +35,7 @@ fi
 # defers them to PermissionRequest). For heuristic prompts we need to validate these:
 # strip subshells from the outer command, check the outer command, then check each
 # extracted subshell body independently.
-strip_subshells() {
-    printf '%s\n' "$1" | sed -E 's/\$\([^)]+\)/__SUBSHELL__/g' | sed -E 's/`[^`]+`/__SUBSHELL__/g'
-}
-
-extract_subshell_bodies() {
-    { printf '%s\n' "$1" | grep -oE '\$\([^)]+\)' | sed 's/^\$(//' | sed 's/)$//'; } 2>/dev/null || true
-    { printf '%s\n' "$1" | grep -oE '`[^`]+`' | sed 's/^`//' | sed 's/`$//'; } 2>/dev/null || true
-}
+# strip_subshells() and extract_subshell_bodies() are provided by lib/subshell.sh.
 
 # Check every segment in the chain (outer command with subshells stripped)
 while IFS= read -r segment; do

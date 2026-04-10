@@ -42,10 +42,10 @@ flowchart TD
     K -->|approved| L[User reviews spec]
     L --> M{User approves?}
     M -->|changes requested| I
-    M -->|approved| N((Run /plan per user story))
+    M -->|approved| N((User decides next step))
 ```
 
-**The terminal state is the approved spec.** The spec contains one or more user stories that emerged from the design conversation. Next step: run `/plan` for each story.
+**The terminal state is the approved spec.** The spec contains one or more user stories that emerged from the design conversation. The user decides next: `/plan` per story, `/workflow-new-feature`, `/workflow-refactor`, or `/workflow-bug-fix`.
 
 ---
 
@@ -72,34 +72,49 @@ If the user says build it, exit without producing a spec.
 
 Before asking the human a single question, do your homework — but do it quickly. Research has diminishing returns. Get the high-value signals fast, then let the human direct where to go deeper.
 
-### Phase 1a: QUICK RESEARCH (parallel, ~60 seconds max)
+### Phase 1a: PROJECT CONTEXT (if project docs exist)
 
-Dispatch up to 3 subagents in parallel. All research runs autonomously — **no permission gates, no pausing to ask**.
+If the repo has project documentation (README, design docs, specs):
+- Read project-level context docs first (e.g., `docs/`, `specs/`, `README.md`)
+- Check for prior decisions or design docs related to the task
+- This provides high-level context before codebase scanning
 
-**Codebase Scan** (1 subagent)
+### Phase 1b: QUICK RESEARCH (parallel, ~60 seconds max)
+
+<HARD-GATE>
+**Do this yourself (no subagent) BEFORE asking the user any design questions:**
+- **Repo rules/config:** Read `.claude/rules/`, `CLAUDE.md`, `AGENTS.md`, or equivalent project guidelines
+- **Reference docs:** Read any `docs/reference/`, `docs/architecture/`, or similar directories
+- **Coding conventions:** Check for `.editorconfig`, linter configs, style guides
+
+After reading, announce what you read:
+> "Project context loaded. I read: [list of rules/config files] and [list of reference docs]."
+</HARD-GATE>
+
+**Default: use direct tools.** Read files, grep patterns, and glob structures yourself. These are fast, keep findings in your context without compression, and avoid subagent overhead.
+
+**Dispatch a subagent only when** the research area is genuinely broad (unfamiliar codebase area, multiple packages to scan, no clear starting point). Max 3 subagents total. All research runs autonomously — **no permission gates, no pausing to ask**.
+
+**Codebase Scan** (subagent — only if scope is broad)
+Skip if the relevant area is a known package or small set of files — use direct reads instead.
+Dispatch when: unfamiliar area, multiple packages involved, or no clear starting files.
 - Project structure, directory layout, key config files
 - Files and modules in the area the user mentioned
 - Shared utilities, common patterns, existing abstractions
 - Test infrastructure and conventions
 - Recent commits in the relevant area (what's been changing?)
 
-**Organization Search** (1 subagent, parallel)
-If the repo belongs to a GitHub organization (derived from `git remote get-url origin`):
+**Organization Search** (subagent — only if user requests)
+Skip by default. Offer as an option during Phase 1c: "I can also search the org's other repos for similar patterns — want me to?"
+If the user requests it and the repo belongs to a GitHub organization:
 - Search the org's repos for how similar problems are solved
 - Look for shared libraries, internal patterns, or conventions
-- Use GitHub MCP tools if available (`mcp__github__search_code` with the org owner)
-- Fall back to `gh search code "<pattern>" --owner=<org>` via Bash
-
-This is often MORE valuable than generic web research — your org's own solutions
-are directly reusable and follow the same conventions.
+- Use `gh search code "<pattern>" --owner=<org>` via Bash
 
 If the repo is personal (no org), skip this step.
 
-**Web Research** (1 subagent, parallel — optional)
+**Web Research** (subagent — optional)
 Only dispatch if the topic genuinely benefits from external context (unfamiliar domain, new library, industry patterns). Skip for well-understood internal changes.
-
-When dispatched, formulate ONE specific question. Not "research everything about X"
-but "how do [similar projects] handle [the specific challenge]?"
 
 ### Research Budget
 
@@ -108,7 +123,7 @@ All research across the entire session is bounded:
 - **Time: ~60 seconds** for Phase 1a. Present what you have, even if subagents are still running.
 - **No permission gates** — research runs autonomously. The budget is the control, not human approval.
 
-### Phase 1b: PRESENT & OFFER
+### Phase 1c: PRESENT & OFFER
 
 Synthesize what you found and present it to the human:
 - What exists in the codebase that's relevant
@@ -163,6 +178,15 @@ For each alternative, provide:
 - "How does this scale? What breaks at 10x load?"
 - "What's the migration path if requirements change?"
 - "Who maintains this and what does that look like in 6 months?"
+
+**Challenge deployment safety (for migrations, refactors, and multi-PR work):**
+- "Is the live system ever in a degraded or partially-migrated state during the transition?"
+- "What's the rollback story? Can you revert to the previous state in one step?"
+- "Can the new code be built and tested alongside the old code before switching over?"
+- "What happens if a PR in the middle of the sequence breaks? What's the blast radius?"
+- Consider **copy-first, cutover, cleanup** as an alternative to **move-in-place**: build the new thing alongside the old, switch over atomically, then delete the old. This is often safer than incremental moves that put production in a partially-migrated state.
+
+**Architecture awareness** — surface relevant architecture patterns from the reference docs read in Phase 1. Reference specific conventions, patterns, or constraints you found rather than giving generic advice.
 
 **Decompose into user stories:**
 As the scope becomes clear, identify independently valuable slices of work:
@@ -236,9 +260,14 @@ Present the spec to the user for final review:
 
 Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once approved.
 
-**Once approved, suggest next step:**
+**Once approved, suggest next steps based on scope and task type:**
 
-> "Ready for `/plan`. This spec has N user stories — run `/plan` for each, starting with [US1 / highest-risk story]."
+- **For features needing detailed technical design:** "This spec has N user stories — run `/plan` for each, starting with [US1 / highest-risk story]."
+- **For simpler features with known patterns:** "This follows established patterns. You could go directly to `/workflow-new-feature`."
+- **For refactoring work:** "Ready for `/workflow-refactor` which guides safe, incremental refactoring with test baselines."
+- **For bug fixes:** "Ready for `/workflow-bug-fix` which guides systematic investigation and minimal-change fixes."
+
+Match the handoff to what the spec actually describes — not every spec leads to `/plan`. Simpler work can go directly to the appropriate workflow skill.
 
 Do NOT auto-invoke any skill. The user decides what's next.
 
@@ -258,6 +287,8 @@ These thoughts mean STOP — you're falling back to passive facilitation:
 | "I should do exhaustive web research to be thorough" | One targeted search gives 80% of the value. Present what you found and offer to go deeper. Let the human decide the research budget. |
 | "This is just a small change, it doesn't need ADRs" | If you considered alternatives, the reasoning is worth capturing. |
 | "The user answered my question, I should move on" | Did they answer the question you should have asked, or the one you did ask? |
+| "I'll skip reading the rules/docs, the plan phase handles that" | Surface constraints NOW. Discovering them in /plan wastes design work. |
+| "The incremental approach is safest" | Incremental moves can leave production in a partially-migrated state. Ask: can the old code stay running until the new code is fully proven? |
 
 ## Key Principles
 
@@ -268,6 +299,7 @@ These thoughts mean STOP — you're falling back to passive facilitation:
 - **Capture the "why not"** — Rejected alternatives and reasoning are as valuable as the chosen approach
 - **User stories emerge from design** — The number of stories is an output of the conversation, not an input. Each must be independently valuable and testable.
 - **WHAT not HOW** — The spec captures requirements, constraints, and acceptance criteria. Architecture, data models, and concrete code belong in `/plan`
+- **Surface project constraints early** — read repo rules and reference docs during research, flag constraints during design, not during implementation
 - **One question at a time** — But make each question count
 - **YAGNI ruthlessly** — Remove unnecessary features from all designs
-- **Dispatch subagents in parallel** — Phase 1a: up to 3 parallel (codebase + org + optional web). Max 3 web searches total, ~60s time budget, no permission gates
+- **Direct tools first, subagents second** — Use Read/Grep/Glob directly for focused areas. Dispatch subagents only when scope is genuinely broad. Max 3 web searches total, ~60s time budget, no permission gates

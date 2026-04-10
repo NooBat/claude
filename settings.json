@@ -2,6 +2,16 @@
   "hooks": {
     "PreToolUse": [
       {
+        "matcher": "mcp__plugin_claude-mem_mcp-search__smart_outline|mcp__plugin_claude-mem_mcp-search__smart_unfold|mcp__plugin_claude-mem_mcp-search__smart_search",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Banned tool: use Serena (get_symbols_overview, find_symbol) or Read/Grep instead\"}}\n'",
+            "statusMessage": "Blocking banned claude-mem tool"
+          }
+        ]
+      },
+      {
         "matcher": "Bash",
         "hooks": [
           {

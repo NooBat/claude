@@ -152,7 +152,23 @@ assert_false "not safe: source ./script.sh"    is_safe_command 'source ./script.
 assert_false "not safe: . ./script.sh"         is_safe_command '. ./script.sh'
 assert_false "not safe: env rm -rf /"          is_safe_command 'env rm -rf /'
 assert_false "not safe: xargs rm"              is_safe_command 'xargs rm'
-assert_false "not safe: find . -name *.py"     is_safe_command 'find . -name *.py'
+assert_true  "safe: find . -name *.py"          is_safe_command 'find . -name *.py'
+assert_true  "safe: find /tmp -maxdepth 1 -type d" is_safe_command 'find /tmp -maxdepth 1 -type d'
+assert_false "not safe: find . -exec rm {} ;"  is_safe_command 'find . -exec rm {} ;'
+assert_false "not safe: find . -execdir sh -c" is_safe_command 'find . -execdir sh -c x'
+assert_false "not safe: find . -delete"        is_safe_command 'find . -name "*.tmp" -delete'
+assert_false "not safe: find . -ok rm {} ;"    is_safe_command 'find . -ok rm {} ;'
+assert_false "not safe: find . -okdir cmd"     is_safe_command 'find . -okdir cmd {} ;'
+assert_true  "safe: rtk gh pr diff 2386"       is_safe_command 'rtk gh pr diff 2386'
+assert_true  "safe: rtk git status"            is_safe_command 'rtk git status'
+assert_true  "safe: rtk git log --oneline -5"  is_safe_command 'rtk git log --oneline -5'
+assert_false "not safe: rtk git push"          is_safe_command 'rtk git push'
+assert_false "not safe: rtk rm -rf /"          is_safe_command 'rtk rm -rf /'
+assert_false "not safe: rtk (bare)"            is_safe_command 'rtk'
+assert_true  "safe: awk '/pattern/ {print}'"   is_safe_command "awk '/pattern/ {print}'"
+assert_true  "safe: gawk '{print \$1}'"        is_safe_command "gawk '{print \$1}'"
+assert_false "not safe: awk system()"          is_safe_command "awk '{system(\"rm -rf /\")}'"
+assert_false "not safe: gawk system()"         is_safe_command "gawk 'BEGIN{system(\"id\")}'"
 assert_false "not safe: time ls"               is_safe_command 'time ls'
 assert_false "not safe: timeout 10 ls"         is_safe_command 'timeout 10 ls'
 
@@ -283,6 +299,64 @@ assert_false "subshell guard: echo \$(git status)"    is_safe_command 'echo $(gi
 assert_false "subshell guard: export PATH=\$(pwd)"    is_safe_command 'export PATH=$(pwd)'
 assert_false "subshell guard: echo \`date\`"          is_safe_command 'echo `date`'
 assert_false "subshell guard: A=\$(echo s) ls"        is_safe_command 'A=$(echo s) ls'
+
+# _scan_subshells: strip_subshells and extract_subshell_bodies
+source "$HOOKS_DIR/lib/subshell.sh"
+
+echo ""
+echo "=== _scan_subshells (strip & extract) ==="
+
+# Simple $()
+assert_eq "strip: simple \$(cmd)" \
+    'A=__SUBSHELL__' \
+    "$(strip_subshells 'A=$(echo hello)')"
+assert_eq "extract: simple \$(cmd)" \
+    'echo hello' \
+    "$(extract_subshell_bodies 'A=$(echo hello)')"
+
+# Nested parens inside $() (the bug this fixes)
+assert_eq "strip: nested parens in jq" \
+    'GH_HOST=__SUBSHELL__' \
+    "$(strip_subshells 'GH_HOST=$(gh repo view --json url -q '"'"'.url | split("/") | .[2]'"'"')')"
+assert_eq "extract: nested parens in jq" \
+    'gh repo view --json url -q '"'"'.url | split("/") | .[2]'"'"'' \
+    "$(extract_subshell_bodies 'GH_HOST=$(gh repo view --json url -q '"'"'.url | split("/") | .[2]'"'"')')"
+
+# Backtick subshell
+assert_eq "strip: backtick" \
+    'A=__SUBSHELL__' \
+    "$(strip_subshells 'A=`date`')"
+assert_eq "extract: backtick" \
+    'date' \
+    "$(extract_subshell_bodies 'A=`date`')"
+
+# Multiple subshells
+assert_eq "strip: two subshells" \
+    'echo __SUBSHELL__ __SUBSHELL__' \
+    "$(strip_subshells 'echo $(date) $(whoami)')"
+
+# $() inside double quotes (still parsed)
+assert_eq "strip: \$() in double quotes stays literal" \
+    'echo "__SUBSHELL__"' \
+    "$(strip_subshells 'echo "$(date)"')"
+
+# $() inside single quotes (not a subshell)
+assert_eq "strip: \$() in single quotes is literal" \
+    'echo '"'"'$(date)'"'"'' \
+    "$(strip_subshells "echo '\$(date)'")"
+
+# No subshells at all
+assert_eq "strip: no subshell" \
+    'echo hello world' \
+    "$(strip_subshells 'echo hello world')"
+assert_eq "extract: no subshell (empty)" \
+    '' \
+    "$(extract_subshell_bodies 'echo hello world')"
+
+# Deeply nested: $() containing $()
+assert_eq "strip: nested \$(\$())" \
+    'A=__SUBSHELL__' \
+    "$(strip_subshells 'A=$(echo $(date))')"
 
 # export builtin → safe
 assert_true  "export: export FOO=bar"                is_safe_command 'export FOO=bar'

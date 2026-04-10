@@ -1,196 +1,192 @@
 ---
 name: review-pr
-description: Use when reviewing a GitHub pull request - dispatches code-reviewer subagent, reads changed files, and posts structured review with inline line-range comments to GitHub
+description: Use when reviewing a GitHub pull request. Automatically detects re-reviews by checking GitHub for prior reviews by the current user - no need to say "re-review". Say "fresh review" to force a full first review. Gathers architectural context, dispatches a code-reviewer subagent, posts structured review with inline line-range comments to GitHub. On re-review, reads author replies and thread resolution status to avoid re-flagging explained or acknowledged issues.
+user-invocable: true
+argument-hint: "<pr-number-or-url>"
 ---
+
 # Review PR
 
-Dispatch the `superpowers:code-reviewer` subagent to review a GitHub PR, then post the review to GitHub with inline file comments (with line ranges) and a general review body.
+Dispatch a code-review subagent to review a GitHub PR, then post the review to GitHub with inline file comments (with line ranges) and a general review body.
 
 **Announce at start:** "Reviewing PR #$0 — fetching data, running code review, and posting to GitHub."
 
 ## Process
 
+### Step 0: Normalize input
+
+`$0` may be a PR number or a full URL. Extract the numeric PR number and define `PR_NUMBER`. Use `PR_NUMBER` (not `$0`) in all subsequent commands and paths.
+
+### Step 0a: Derive repo identity and check PR state
+
+Get repo identifier (save as `REPO`):
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+```
+
+Get GitHub hostname for GHE (save as `GH_HOST`):
+```bash
+GH_HOST=$(gh repo view --json url -q '.url | split("/") | .[2]')
+```
+
+Check that the PR is still open:
+```bash
+gh pr view $PR_NUMBER --json state -q .state
+```
+If the state is `MERGED` or `CLOSED`, report to the user and stop — reviewing a non-open PR is not useful.
+
+Get the PR author (save as `PR_AUTHOR`):
+```bash
+gh pr view $PR_NUMBER --json author -q .author.login
+```
+
+### Step 0b: Detect re-review (stateless)
+
+Get the current user's GitHub login:
+```bash
+gh api user --hostname $GH_HOST --jq .login
+```
+Save as `CURRENT_USER`.
+
+Query GitHub for the most recent non-pending review by this user:
+```bash
+gh api repos/$REPO/pulls/$PR_NUMBER/reviews --hostname $GH_HOST --paginate \
+  --jq '[.[] | select(.user.login == "'"$CURRENT_USER"'" and .state != "PENDING") | {id, commit_id, submitted_at, state}] | sort_by(.submitted_at) | last'
+```
+
+If the result is `null` or empty: no baseline exists. Set `HAS_BASELINE=false`.
+
+If the result is valid JSON but `commit_id` is `null` or empty: the prior review has no commit anchor. Warn the user: "Prior review found but has no commit reference — proceeding with first review." Set `HAS_BASELINE=false`.
+
+If the result is valid JSON with a `commit_id`: set `HAS_BASELINE=true`. Save `commit_id` as `OLD_HEAD`, `submitted_at` as `V1_REVIEW_TIME`, and `id` as `V1_REVIEW_ID`.
+
+### Step 0c: Route
+
+Determine user intent from the input:
+
+| Intent | Phrases |
+|--------|---------|
+| Re-review | "re-review", "review again", "another look", "follow up review" |
+| Fresh review | "fresh review", "start fresh", "from scratch", "ignore previous", "clean review" |
+| Default | Anything else (e.g., "review PR #123", a URL) |
+
+**Route:**
+- `HAS_BASELINE=false` + intent is re-review -> warn: "No prior review found on GitHub for this PR — proceeding with first review." Continue to Step 1.
+- `HAS_BASELINE=false` + any other intent -> first review. Continue to Step 1. Do NOT read `SKILL-REREVIEW.md`.
+- `HAS_BASELINE=true` + intent is fresh review -> first review. Continue to Step 1.
+- `HAS_BASELINE=true` + any other intent (including default) -> **re-review**. Announce: "Found your review from {V1_REVIEW_TIME} — running re-review. Say `fresh review` to override." Read `SKILL-REREVIEW.md` and follow it from Step R0. Do NOT continue to Step 1.
+
 ### Step 1: Gather PR context
 
+Each line below is a **separate Bash call**. Save all outputs in conversation context.
+
+Get PR metadata (save as `PR_JSON`, extract `BASE_SHA` and `HEAD_SHA` from it):
 ```bash
-# Get repo identifier
-REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
-
-# Get PR metadata
-gh pr view $0 --json title,body,baseRefName,headRefName,baseRefOid,headRefOid,files,author
-
-# Get the diff (this is what the reviewer needs)
-gh pr diff $0
+gh pr view $PR_NUMBER --json title,body,baseRefName,headRefName,baseRefOid,headRefOid,files,author
 ```
 
-Save `BASE_SHA`, `HEAD_SHA`, `REPO`, PR title, and PR body for later steps.
-
-### Step 1a: Create a temporary worktree at the PR's HEAD
-
-**Never check out a different branch in the main worktree** — other agents may be reading files concurrently. Create a temporary worktree instead:
-
+Get changed file paths, excluding lock files (save as `CHANGED_FILES`):
 ```bash
-git fetch origin pull/$0/head
-git worktree add /tmp/pr-review-$0 HEAD_SHA --detach
+gh pr view $PR_NUMBER --json files -q '.files[].path | select(test("(pnpm-lock|package-lock|yarn\\.lock|Cargo\\.lock|go\\.sum)") | not)'
 ```
 
-Use `/tmp/pr-review-$0` as the base path for **all file reads** from here on — both your own reads in Step 1b and the subagent's reads in Step 2. Pass this path (`WORKTREE_PATH`) to the subagent prompt so it reads from the correct location.
+Get the diff, excluding lock files:
+```bash
+gh pr diff $PR_NUMBER | awk '/^diff --git.*(pnpm-lock|package-lock|yarn\.lock|Cargo\.lock|go\.sum)/{skip=1; next} /^diff --git/{skip=0} !skip'
+```
 
-### Step 1b: Gather architectural context (what makes reviews insightful)
+### Step 1a: Create or reuse worktree at the PR's HEAD
+
+**Never check out a different branch in the main worktree** — other agents may be reading files concurrently. Use a dedicated worktree instead.
+
+**First, clean up stale worktrees** (older than 7 days):
+```bash
+find /tmp -maxdepth 1 -name "pr-review-*" -type d -mtime +7 -exec git worktree remove {} 2>/dev/null \;
+```
+
+Derive `REPO_SLUG` from `REPO` (replace `/` with `-`). Set `WORKTREE_PATH=/tmp/pr-review-$REPO_SLUG-$PR_NUMBER`.
+
+Fetch PR head:
+```bash
+git fetch origin pull/$PR_NUMBER/head
+```
+
+Check if worktree already exists:
+```bash
+if test -d $WORKTREE_PATH; then echo "EXISTS"; else echo "NEW"; fi
+```
+
+If `EXISTS` — reuse, update to latest HEAD:
+```bash
+git -C $WORKTREE_PATH checkout $HEAD_SHA --detach
+```
+
+If `NEW` — create:
+```bash
+git worktree add $WORKTREE_PATH $HEAD_SHA --detach
+```
+
+Use `WORKTREE_PATH` as the base path for **all file reads** from here on.
+
+**Do NOT delete the worktree after the review** — it will be reused if the PR is re-reviewed.
+
+### Step 1b: Gather architectural context
 
 The diff alone only shows what changed. Insightful reviews need to understand **where the code is going** and **what patterns already exist**. Gather:
 
-1. **Related specs/plans** — search for spec/plan docs related to the PR's feature area:
-
-   ```bash
-   # Check for specs, plans, or design docs mentioned in PR body or related to changed paths
-   find specs/ docs/plans/ -name "*.md" 2>/dev/null | head -20
-   ```
-
-   Read any specs that relate to the PR's feature. These reveal the **destination** — what's planned next, how many more files will follow this pattern, what the full scope looks like.
-2. **Sibling files** — read files adjacent to the changed ones that follow (or should follow) the same patterns. This reveals whether the PR is consistent with existing conventions or diverging.
-3. **Consumers/callers** — for new APIs, helpers, or exports: who will use them? How many call sites will exist? This reveals whether an abstraction is warranted.
+1. **Related specs/plans** — search for spec/plan docs related to the PR's feature area. Read any that relate. These reveal the **destination** — what's planned next, how many more files will follow this pattern.
+2. **Sibling files** — read files adjacent to the changed ones that follow (or should follow) the same patterns.
+3. **Consumers/callers** — for new APIs, helpers, or exports: who will use them?
 
 Include all of this in the subagent prompt as `## Architectural Context`.
 
+### Step 1c: Discover review rules and checklists
+
+Two layers of review rules exist. Discover both, then tell the subagent which takes priority.
+
+#### Layer 1: Repo review-rules (authoritative)
+
+Check if the PR's repo has its own review rules:
+```bash
+ls "$WORKTREE_PATH/.claude/review-rules/"*.md 2>/dev/null
+```
+
+If files are found, save as `REPO_RULES`. These are **authoritative** for the topics they cover.
+
+#### Layer 2: Workspace/user checklist (gap-filler)
+
+Classify the PR's domain from its files:
+
+| Signal | Domain |
+|--------|--------|
+| >50% of changed files are `.ts`/`.tsx`/`.css` | `frontend` |
+| >50% of changed files are `.go` | `backend-go` |
+| >50% of changed files are `.scala` | `backend-scala` |
+| >50% of changed files are `.py` | `backend-python` |
+| >50% of changed files are `.rs` | `backend-rust` |
+
+If a domain is identified, check for a checklist file at `skills/review-pr/checklists/$DOMAIN.md`.
+
+#### Priority
+
+- **Repo rules only**: Use repo rules as the sole review standard.
+- **Checklist only**: Use checklist as the sole review standard.
+- **Both exist**: Repo rules are authoritative. Checklist applies only for checks NOT covered by any repo rule.
+- **Neither**: Review uses architectural lenses only.
+
 ### Step 2: Dispatch code-reviewer subagent
 
-Use the Agent tool with `subagent_type: "superpowers:code-reviewer"` and `model: "sonnet"` (no  `isolation` — the worktree from Step 1a is shared).
+Use the Agent tool with `model: "sonnet"` (no `isolation` — the worktree from Step 1a is shared).
 
-Include `WORKTREE_PATH` in the subagent prompt and instruct it to read all files from that path (e.g., `{WORKTREE_PATH}/src/foo.ts` instead of `src/foo.ts`). The subagent must read the actual changed files (not just the diff) to understand full context.
+**Build the subagent prompt by reading `PROMPT-TEMPLATE.md`** (same directory as this file). It contains the file reading budget, review lenses, and output format.
 
-**Critical instruction for the subagent prompt — append this to the standard code-reviewer template:**
-
-```
-## Architectural Context
-
-{PASTE specs, sibling file summaries, and caller info gathered in Step 1b}
-```
-
-Then append the review lenses and output format below:
-
-```
-## Review Lenses
-
-Go beyond correctness. Apply each lens to the changed code:
-
-### 1. Pattern Recognition
-Look at the SHAPE of the code, not just whether it works:
-- Is this a known pattern done partially? (e.g., helpers without encapsulation = proto-POM)
-- Is there an established pattern (design pattern, architecture pattern) that would fit here?
-- Are there repeated structures that signal a missing abstraction?
-
-### 2. Projection — Where Is This Going?
-Use the architectural context (specs, plans) to evaluate the current code against its future:
-- If 5 more files will follow this pattern, does the current approach scale?
-- Will selectors/constants/configs scatter across files without a central source?
-- Are there extension points that should exist now to avoid painful retrofits?
-
-### 3. Consistency with Existing Codebase
-Compare against sibling files and existing conventions:
-- Does it follow the patterns established elsewhere in the codebase?
-- If it deviates, is the deviation justified or accidental?
-- Are there existing utilities/helpers that could be reused instead of reinvented?
-
-### 4. Abstraction Fitness
-Evaluate whether the level of abstraction is right:
-- Too abstract: premature generalization for a single use case
-- Too concrete: duplicated logic that should be shared (only if 3+ repetitions exist or are planned)
-- Just right: matches the current and near-term needs
-
-### 5. Integration Surface
-How does this code connect to the rest of the system?
-- Are the boundaries clean? (clear inputs/outputs, no hidden dependencies)
-- Will changes here force changes elsewhere?
-- Is the coupling appropriate for the relationship between components?
-
-For each lens, if you find something noteworthy, include it as an insight in the review.
-Prefix insightful observations with **Insight:** (separate from bug/issue severity).
-Not every lens will produce findings — only include substantive observations.
-
-## Output Format for GitHub Posting
-
-Structure your review output in TWO clearly separated sections:
-
-### GENERAL REVIEW
-Put strengths, recommendations, assessment, and any feedback NOT tied to specific
-lines here. This becomes the top-level review body on GitHub.
-
-**Tone: robotic/structured.** Write like a CI report, not a human. Use tables, bullet lists,
-short factual statements. No adjectives, no prose, no bolded praise phrases like "Clean design"
-or "Well-implemented". Just state what happened and whether it's correct.
-
-Example structure:
-```
-
-## Summary
-
-| Area               | Status                                |
-| ------------------ | ------------------------------------- |
-| Credential routing | ✅ Provider setting now controls path |
-| Dead code removal  | ✅ 3 deprecated settings removed      |
-| Test coverage      | ✅ New routing paths covered          |
-
-## Notes
-
-- `apiBaseUrl` override only applies to GFP path — intentional per PR description
-- Tests still reference `ANTHROPIC_API_KEY` env var (vestigial, non-blocking)
-
-## Verdict
-
-Ready to merge / Needs fixes / Needs discussion
-
-```
-
-### INLINE COMMENTS
-For every issue tied to specific code, output a JSON array. Each entry:
-
-{
-  "path": "relative/file/path",
-  "body": "Your comment (markdown OK)",
-  "start_line": <first line of range, or same as line for single-line>,
-  "line": <last line of range>,
-  "side": "RIGHT"
-}
-
-Rules:
-- Lines MUST fall within the PR diff (changed/added lines or diff context lines)
-- Use start_line < line for multi-line ranges, start_line == line for single-line
-- side: "RIGHT" for new/changed code, "LEFT" for deleted code
-- Prefix the body with: **Critical:**, **Important:**, **Minor:**, or **Insight:**
-
-**Tone: human/conversational.** Write inline comments like a teammate, not a linter.
-Be direct but friendly. Use "you" and "we". Ask questions. Explain the *why*.
-Don't write formal topic sentences — just say what you see and what you'd suggest.
-
-Good: "This'll break if `provider` is ever `undefined` — the `else` branch assumes it's always `\"anthropic\"`. Worth a guard?"
-Bad: "**Important:** The else branch assumes the provider is always 'anthropic'. Consider adding a guard clause for undefined values."
-
-Good: "Nice catch exporting this — kills the duplicate string problem."
-Bad: "**Insight:** Exporting SECRET_KEY eliminates duplicate string literals across modules."
-
-Still use the severity prefix (**Critical:**/**Important:**/**Minor:**/**Insight:**) but write the rest conversationally.
-
-Output ONLY valid JSON for the array. Example:
-
-INLINE_COMMENTS_JSON:
-[
-  {
-    "path": "src/foo.ts",
-    "body": "**Important:** This variable stopped being used after your refactor — safe to remove?",
-    "start_line": 42,
-    "line": 42,
-    "side": "RIGHT"
-  },
-  {
-    "path": "src/bar.ts",
-    "body": "**Minor:** This is basically the same logic as `validate()` — might be worth pulling into a shared helper so they don't drift apart.",
-    "start_line": 10,
-    "line": 25,
-    "side": "RIGHT"
-  }
-]
-```
+Assemble the prompt in this order:
+1. PR diff + changed files list + `WORKTREE_PATH`
+2. File Reading Budget (from template)
+3. Architectural Context (filled in from Step 1b)
+4. Review rules section (from template — includes repo rules, checklist, or both with priority)
+5. Review Lenses (from template)
+6. Output Format (from template)
 
 ### Step 3: Parse the review output
 
@@ -201,10 +197,19 @@ From the subagent's response, extract:
 
 ### Step 4: Post to GitHub
 
-Use `gh api` to post the review in a single API call:
-
+**Pre-flight: clear stale pending reviews.** Before posting, check for and delete any pending review:
 ```bash
-gh api repos/{REPO}/pulls/$0/reviews \
+gh api repos/$REPO/pulls/$PR_NUMBER/reviews --hostname $GH_HOST \
+  --jq '.[] | select(.state == "PENDING") | .id'
+# If an ID is returned, delete it:
+gh api repos/$REPO/pulls/$PR_NUMBER/reviews/{REVIEW_ID} \
+  --hostname $GH_HOST --method DELETE
+```
+
+Post the review:
+```bash
+gh api repos/$REPO/pulls/$PR_NUMBER/reviews \
+  --hostname $GH_HOST \
   --method POST \
   --input - <<'EOF'
 {
@@ -218,25 +223,33 @@ EOF
 
 **Event mapping:**
 
-- Reviewer says "Ready to merge? Yes" → `"event": "APPROVE"`
-- Reviewer says "Ready to merge? With fixes" → `"event": "COMMENT"`
-- Reviewer says "Ready to merge? No" → `"event": "REQUEST_CHANGES"`
+If a domain checklist was loaded, use the checklist score to influence the event:
+- >=90% checks passed AND verdict is "Ready to merge" -> `"event": "APPROVE"`
+- 75-89% checks passed OR verdict is "Needs fixes" -> `"event": "COMMENT"`
+- <75% checks passed OR verdict is "Needs discussion" -> `"event": "REQUEST_CHANGES"`
 
-**Fallback:** If `gh api` fails with a 422 (line not in diff), remove the offending comment from the array and move it into the general body instead. Retry.
+If no checklist was loaded, use the reviewer's verdict directly:
+- Verdict is "Ready to merge" -> `"event": "APPROVE"`
+- Verdict is "Needs fixes" -> `"event": "COMMENT"`
+- Verdict is "Needs discussion" -> `"event": "REQUEST_CHANGES"`
 
-### Step 4b: Clean up the worktree
+**Fallback for 422 errors:**
+- "line not in diff" or "start line must precede end line" -> remove the offending comment from the array, move its content into the general body under a "## Additional Comments" section, and retry.
+- "pending review exists" -> delete the pending review (see pre-flight above) and retry.
 
-```bash
-git worktree remove /tmp/pr-review-$0
-```
+### Step 4b: Keep the worktree for re-reviews
+
+**Do NOT delete the worktree.** It will be reused if the PR is re-reviewed. Stale worktrees are cleaned up lazily at the start of the next `/review-pr` invocation (see Step 1a).
 
 ### Step 5: Report to user
 
 Show:
-
 - Link to the posted review
 - Summary of how many inline comments were posted
 - The assessment verdict
+- If repo review-rules were found: list which rule files were applied
+- If a checklist was loaded: checklist score (e.g., "Frontend Compliance: 7/8 checks passed (88%)")
+- If neither: note that review used architectural lenses only
 
 ## Alternate Posting Method (gh-pr-review extension)
 
@@ -244,10 +257,10 @@ If `gh api` is problematic, use the `gh-pr-review` extension instead:
 
 ```bash
 # Start pending review
-gh pr-review review --start -R {REPO} $0
+gh pr-review review --start -R $REPO $PR_NUMBER
 
 # Add each inline comment (supports multi-line ranges)
-gh pr-review review --add-comment -R {REPO} $0 \
+gh pr-review review --add-comment -R $REPO $PR_NUMBER \
   --review-id {REVIEW_ID} \
   --path "src/foo.ts" \
   --start-line 10 \
@@ -256,7 +269,7 @@ gh pr-review review --add-comment -R {REPO} $0 \
   --body "**Important:** Comment here"
 
 # Submit with general body
-gh pr-review review --submit -R {REPO} $0 \
+gh pr-review review --submit -R $REPO $PR_NUMBER \
   --review-id {REVIEW_ID} \
   --event COMMENT \
   --body "General review body here"

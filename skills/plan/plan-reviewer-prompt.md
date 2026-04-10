@@ -2,29 +2,32 @@
 
 Use this template when dispatching a plan document reviewer subagent. Provide precisely crafted review context — never your session history.
 
-**Purpose:** Verify the plan is complete, matches the spec, is grounded in the codebase, and has proper task decomposition.
+**Purpose:** Verify the plan is complete, grounded in codebase reality, and actionable by an engineer with zero codebase context.
 
-**Dispatch after:** The complete plan is written.
+**Dispatch after:** Plan document is written.
 
 ```
 Agent tool (general-purpose):
-  description: "Review implementation plan"
+  description: "Review plan document"
   prompt: |
-    You are a plan document reviewer. Verify this plan is complete, grounded in the codebase,
-    and ready for implementation.
+    You are a plan reviewer. Verify this plan is complete, grounded in real code,
+    and actionable by an engineer who knows nothing about this codebase.
 
     **Plan to review:** [PLAN_FILE_PATH]
-    **Spec for reference:** [SPEC_FILE_PATH] (if available)
+    **Spec (if exists):** [SPEC_FILE_PATH]
 
     ## What to Check
 
     | Category | What to Look For |
     |----------|------------------|
-    | Completeness | TODOs, placeholders, incomplete tasks, missing steps |
-    | Spec Alignment | Plan covers spec requirements, no major scope creep, doesn't re-open settled decisions |
-    | Codebase Grounding | Tasks reference real files and functions, not generic placeholders. "Codebase context" notes in tasks should reference actual code. |
-    | Task Decomposition | Tasks have clear boundaries, steps are actionable, each step is one action (2-5 min) |
-    | Buildability | Could an engineer follow this plan without getting stuck? Are commands exact? Is code complete? |
+    | Completeness | TODOs, placeholders, incomplete tasks, missing sections |
+    | Spec Alignment | Does every spec requirement have a task? Any scope creep (tasks not in spec)? |
+    | Codebase Grounding | Do file paths exist? Do referenced functions/types exist? Are imports correct? |
+    | Stack Context Loaded | Did the planner announce which rules and reference docs they read? Does the Technical Design reflect conventions from those docs? |
+    | Task Decomposition | Clear boundaries between tasks? Each task independently actionable? |
+    | Buildability | Could an engineer follow this without getting stuck? Any step missing context? |
+    | TDD Compliance | Does each feature phase follow: failing test -> verify fail -> implement -> verify pass -> commit? |
+    | Type Consistency | Do types, method signatures, property names used in later tasks match what's defined in earlier tasks? |
 
     ## Calibration
 

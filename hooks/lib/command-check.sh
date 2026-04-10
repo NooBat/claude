@@ -117,6 +117,33 @@ is_safe_command() {
         return 0
     fi
 
+    # rtk is a transparent CLI proxy — strip prefix and evaluate the real command
+    if [[ "$base_cmd" == "rtk" ]]; then
+        local inner="${effective#rtk}"
+        inner="${inner#"${inner%%[![:space:]]*}"}"
+        if [[ -n "$inner" ]]; then
+            is_safe_command "$inner"
+            return $?
+        fi
+        return 1
+    fi
+
+    # find is safe unless it carries execution/deletion flags
+    if [[ "$base_cmd" == "find" ]]; then
+        if [[ "$effective" =~ (^|[[:space:]])-(exec|execdir|delete|ok|okdir)([[:space:]]|$) ]]; then
+            return 1
+        fi
+        return 0
+    fi
+
+    # awk variants are safe unless the script uses system() to execute commands
+    if [[ "$base_cmd" == "awk" || "$base_cmd" == "gawk" || "$base_cmd" == "mawk" || "$base_cmd" == "nawk" ]]; then
+        if [[ "$effective" =~ system[[:space:]]*\( ]]; then
+            return 1
+        fi
+        return 0
+    fi
+
     # Delegate git commands (use effective command with assignments stripped)
     if [[ "$base_cmd" == "git" ]]; then
         is_safe_git_command "$effective"
